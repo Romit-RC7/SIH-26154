@@ -17,3 +17,7 @@ uploads/raw/*
 !uploads/raw/.gitkeep
 uploads/extracted/*
 !uploads/extracted/.gitkeep
+models/
+*.gguf
+*.safetensors
+*.bin

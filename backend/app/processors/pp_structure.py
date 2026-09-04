@@ -35,14 +35,47 @@ class PPStructureAnalyzer(BaseStructureAnalyzer):
             # Pre-import requests/chardet to prevent zlib C symbol collisions
             import requests  # noqa: F401
             import chardet   # noqa: F401
-            from paddleocr import PPStructureV3
 
-            self.engine = PPStructureV3(
-                use_doc_orientation_classify=False,
-                use_doc_unwarping=False
-            )
+            # Resolve local model paths from models/pp_structure_v3
+            models_root = settings.PP_STRUCTURE_MODEL_DIR
+            layout_dir = models_root / "layout"
+            table_dir = models_root / "table"
+            det_dir = models_root / "det"
+            rec_dir = models_root / "rec"
+
+            try:
+                from paddleocr import PPStructure
+                engine_cls = PPStructure
+            except ImportError:
+                from paddleocr import PPStructureV3
+                engine_cls = PPStructureV3
+
+            kwargs = {
+                "table": True,
+                "ocr": True,
+                "layout": True,
+                "lang": "en",
+                "show_log": False,
+                "recovery": True,
+            }
+
+            # Inject local downloaded model directories when present
+            if layout_dir.exists() and any(layout_dir.iterdir()):
+                kwargs["layout_model_dir"] = str(layout_dir)
+                logger.info("PP-Structure: Using local layout model from %s", layout_dir)
+            if table_dir.exists() and any(table_dir.iterdir()):
+                kwargs["table_model_dir"] = str(table_dir)
+                logger.info("PP-Structure: Using local table model from %s", table_dir)
+            if det_dir.exists() and any(det_dir.iterdir()):
+                kwargs["det_model_dir"] = str(det_dir)
+                logger.info("PP-Structure: Using local detection model from %s", det_dir)
+            if rec_dir.exists() and any(rec_dir.iterdir()):
+                kwargs["rec_model_dir"] = str(rec_dir)
+                logger.info("PP-Structure: Using local recognition model from %s", rec_dir)
+
+            self.engine = engine_cls(**kwargs)
             self._initialized = True
-            logger.info("PaddleOCR structure analyzer initialized successfully")
+            logger.info("PaddleOCR PP-Structure initialized successfully with offline model weights.")
         except Exception as e:
             logger.warning(
                 f"PaddleOCR structure analyzer unavailable. Using fallback analyzer. (Error: {e})"

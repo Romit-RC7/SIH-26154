@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     RAW_UPLOAD_DIR: Path = UPLOAD_DIR / "raw"
     EXTRACTED_UPLOAD_DIR: Path = UPLOAD_DIR / "extracted"
 
+    # Model Storage Paths
+    MODELS_DIR: Path = BASE_DIR / "models"
+    PP_STRUCTURE_MODEL_DIR: Path = MODELS_DIR / "pp_structure_v3"
+
     # Processing & OCR Configuration
     # Options: 'pp_structure' (production PaddleOCR) or 'rule_based' (fast PyMuPDF/fallback)
     DOC_ANALYZER_ENGINE: str = "pp_structure"

@@ -32,3 +32,12 @@ uploads/extracted/*
 !uploads/extracted/.gitkeep
 backend/uploads/
 
+# Model Weights & Artifacts (Stored locally / Hugging Face downloads)
+models/
+*.gguf
+*.pdiparams
+*.pdiparams.info
+*.pdmodel
+*.safetensors
+*.bin
+*.onnx
