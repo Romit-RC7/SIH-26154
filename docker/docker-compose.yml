@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   # FastAPI Semantic Document Processing Backend
@@ -21,6 +21,7 @@ services:
       - DOC_ANALYZER_ENGINE=pp_structure
       - ENABLE_OCR=true
       - MAX_UPLOAD_SIZE_MB=50
+      - PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
     volumes:
       - ../backend:/app/backend
       - ../uploads:/app/uploads
