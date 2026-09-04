@@ -19,11 +19,13 @@ numpy>=1.26.0
 
 # PP-StructureV3 (PaddleOCR)
 # In Docker or production Linux GPU/CPU:
-# paddlepaddle>=2.6.0
-# paddleocr>=2.7.3
+# paddlepaddle==3.0.0
+# paddleocr==3.7.0
+# paddlex[ocr]>=3.7.0,<3.8.0
 
 # Testing & Client
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
 httpx>=0.27.0
 aiofiles>=23.2.1
+aiosqlite>=0.20.0

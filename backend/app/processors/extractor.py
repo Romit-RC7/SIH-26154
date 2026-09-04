@@ -47,14 +47,26 @@ class DocumentExtractor:
         all_elements: List[RawDocumentElement] = []
 
         use_pp = settings.DOC_ANALYZER_ENGINE == "pp_structure" and pp_structure_analyzer.is_available()
+        extracted_with_pp = False
 
         if use_pp:
-            logger.info("Extracting PDF layout using PP-StructureV3...")
-            for page in pages:
-                if page.image:
-                    page_elems = pp_structure_analyzer.analyze_page(page.image, page.page_number)
-                    all_elements.extend(page_elems)
-        else:
+            try:
+                logger.info("Extracting PDF layout using PP-StructureV3...")
+                for page in pages:
+                    if page.image:
+                        page_elems = pp_structure_analyzer.analyze_page(page.image, page.page_number)
+                        all_elements.extend(page_elems)
+                extracted_with_pp = True
+            except Exception as e:
+                logger.error(
+                    f"PaddleOCR structure analysis failed. Falling back to PyMuPDF analyzer: {e}"
+                )
+                all_elements = []
+                extracted_with_pp = False
+
+        if not extracted_with_pp:
+            if not use_pp:
+                logger.warning("PaddleOCR structure analyzer unavailable. Using fallback analyzer.")
             logger.info("Extracting PDF layout using Fallback / PyMuPDF Structure Analyzer...")
             doc = fitz.open(str(file_path))
             for page_idx, page in enumerate(pages):

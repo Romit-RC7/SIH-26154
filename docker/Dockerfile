@@ -30,7 +30,7 @@ COPY requirements.txt /app/requirements.txt
 # Install Python packages
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir paddlepaddle==2.6.2 paddleocr>=2.7.3
+    pip install --no-cache-dir paddlepaddle==3.0.0 paddleocr==3.7.0 "paddlex[ocr]>=3.7.0,<3.8.0"
 
 # Copy application source code
 COPY backend/ /app/backend/
