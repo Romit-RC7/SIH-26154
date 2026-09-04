@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # FastAPI Semantic Document Processing Backend
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sih_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - POSTGRES_SERVER=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres_password
+      - POSTGRES_DB=sih_content_platform
+      - DOC_ANALYZER_ENGINE=pp_structure
+      - ENABLE_OCR=true
+      - MAX_UPLOAD_SIZE_MB=50
+    volumes:
+      - ../backend:/app/backend
+      - ../uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - sih_network
+
+  # PostgreSQL 16 (with pgvector pre-installed for Phase 3 readiness)
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: sih_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_DB: sih_content_platform
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sih_content_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sih_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  sih_network:
+    driver: bridge
