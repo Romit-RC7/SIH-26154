@@ -2,7 +2,7 @@
 
 > **Project**: AI-Powered Content Transformation Platform (SIH-26154)  
 > **Phase**: Milestone 1 — Foundational Semantic Document Processing System & Model Weights Staging  
-> **Updated**: September 5, 2026  
+> **Updated**: September 6, 2026  
 > **Repository**: [https://github.com/Romit-RC7/SIH-26154.git](https://github.com/Romit-RC7/SIH-26154.git)  
 > **Workspace**: `Ai-Services`
 
@@ -10,7 +10,7 @@
 
 ## 1. System Overview & Problem Statement
 
-The **SIH-26154 AI-Powered Content Transformation Platform** transforms unstructured, multi-page, heterogeneous documents (**PDF** and **DOCX**) into a canonical, structured **Semantic Document JSON**.
+The **SIH-26154 AI-Powered Content Transformation Platform** transforms unstructured, multi-page, heterogeneous documents (**PDF**, **DOCX**, **PPTX**, and standalone **Images** such as PNG, JPG, JPEG, WEBP, BMP, TIFF) into a canonical, structured **Semantic Document JSON**.
 
 Rather than relying on naive raw text extraction, the platform treats documents as multi-modal composites containing:
 
@@ -24,13 +24,13 @@ Rather than relying on naive raw text extraction, the platform treats documents 
 Every downstream AI module (BGE Embedding Engine, pgvector semantic search, Qwen2.5-VL visual enricher, UniChart reasoning, Knowledge Graph constructor, and Multi-Format Output Generators) interacts exclusively with the **Unified Semantic Document JSON** schema, rather than dealing directly with raw document bytes.
 
 ```
-PDF / DOCX Upload
+PDF / DOCX / PPTX / Image Upload
        ↓
-Document Parsers (PyMuPDF / python-docx)
+Document Parsers (PyMuPDF / python-docx / python-pptx / Pillow)
        ↓
-Offline Layout + OCR Analysis (Primary: PP-StructureV3 | Backup: PyMuPDF Fallback)
+Offline Layout + OCR Analysis (Primary: PP-StructureV3 | Backup: PyMuPDF Fallback | Direct Structural Parsers)
        ↓
-Intermediate Region Document (stable element IDs and disk-persisted crops)
+Intermediate Region Document (stable element IDs & disk-persisted crops in uploads/extracted/)
        ↓
 Staged Table / Formula / Chart / Vision Recognition
        ↓
@@ -45,22 +45,41 @@ Canonical Semantic Document JSON (Pydantic Schema)
 PostgreSQL 16 + pgvector Storage (JSONB document + relational elements)
 ```
 
+### Multi-Format Ingestion Strategy & Image Persistence
+
+1. **PDF Ingestion (`pdf_parser.py` + `pp_structure.py` / `fallback_analyzer.py`)**:
+   - PyMuPDF rasterizes pages into numpy image arrays for PP-StructureV3 OCR/layout detection or runs heuristic layout analysis in fallback mode.
+2. **Word Ingestion (`docx_parser.py`)**:
+   - `python-docx` parses hierarchical headings, paragraphs, native tables, and extracts embedded document images.
+3. **PowerPoint Ingestion (`ppt_parser.py`)**:
+   - `python-pptx` parses presentation slides as logical pages (`ParsedPage`).
+   - Extracts text shapes with calculated slide bounding boxes and reading order.
+   - Formats native PPT tables into dual representations (GitHub Flavored Markdown + raw HTML + row matrix data).
+   - Extracts embedded image shapes (`shape_type == 13`) as converted RGB PIL Images.
+4. **Standalone Image Ingestion (`image_parser.py`)**:
+   - Handles standalone image formats (`.png`, `.jpg`, `.jpeg`, `.webp`, `.bmp`, `.tiff`).
+   - Maps the file to a single-page document with an image element spanning full dimensions.
+5. **Visual Asset Persistence (`storage_service.py` -> `save_image_crop`)**:
+   - Both embedded PPTX images and standalone uploaded images are saved to disk under `uploads/extracted/{document_id}/{element_id}.png`.
+   - The relative file path is attached to `elem.attributes["saved_image_path"]`, ready for downstream visual intelligence models (Qwen2.5-VL and UniChart).
+
 ---
 
 ## 2. Staged Offline Model Weights (`models/`)
 
 All required AI models have been downloaded, verified, and staged locally in dedicated subdirectories under `models/` for completely offline execution:
 
-| Subfolder | Model Identifier | Purpose / Task | Format / Key Files |
-| :--- | :--- | :--- | :--- |
-| **`models/pp_structure_v3/`** | `PaddleOCR / PP-Structure` | Layout parsing, table structure (SLANet), Text Detection & Recognition | `layout/` (`model.pdiparams`), `table/` (`inference.pdiparams`), `det/`, `rec/` |
-| **`models/unichart_base_960/`** | `ahmed-masry/unichart-base-960` | Specialized Chart Comprehension, Data Extraction & Visual Reasoning | `pytorch_model.bin` (809 MB), `tokenizer.json`, `config.json` |
-| **`models/qwen2.5_vl_3b_q4/`** | `unsloth/Qwen2.5-VL-3B-Instruct-GGUF` | Multimodal Vision-Language for figures, diagrams & flowcharts | `Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf` (1.92 GB) + `mmproj-F16.gguf` (1.33 GB) |
-| **`models/qwen3_4b_q4/`** | `unsloth/Qwen3-4B-GGUF` | Lightweight High-Efficiency Reasoning & Fast Synthesis LLM | `Qwen3-4B-Q4_K_M.gguf` (2.49 GB single quant) |
-| **`models/qwen3_8b_q4/`** | `unsloth/Qwen3-8B-GGUF` | Core Deep-Reasoning & Multi-Format Content Generation LLM | `Qwen3-8B-Q4_K_M.gguf` (5.02 GB single quant) |
-| **`models/bge_small_en_v1.5/`** | `BAAI/bge-small-en-v1.5` | Dense Semantic Vector Embeddings for pgvector search | `model.safetensors` (133 MB), ONNX runtime models, tokenizer configs |
+| Subfolder                       | Model Identifier                      | Purpose / Task                                                         | Format / Key Files                                                              |
+| :------------------------------ | :------------------------------------ | :--------------------------------------------------------------------- | :------------------------------------------------------------------------------ |
+| **`models/pp_structure_v3/`**   | `PaddleOCR / PP-Structure`            | Layout parsing, table structure (SLANet), Text Detection & Recognition | `layout/` (`model.pdiparams`), `table/` (`inference.pdiparams`), `det/`, `rec/` |
+| **`models/unichart_base_960/`** | `ahmed-masry/unichart-base-960`       | Specialized Chart Comprehension, Data Extraction & Visual Reasoning    | `pytorch_model.bin` (809 MB), `tokenizer.json`, `config.json`                   |
+| **`models/qwen2.5_vl_3b_q4/`**  | `unsloth/Qwen2.5-VL-3B-Instruct-GGUF` | Multimodal Vision-Language for figures, diagrams & flowcharts          | `Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf` (1.92 GB) + `mmproj-F16.gguf` (1.33 GB)    |
+| **`models/qwen3_4b_q4/`**       | `unsloth/Qwen3-4B-GGUF`               | Lightweight High-Efficiency Reasoning & Fast Synthesis LLM             | `Qwen3-4B-Q4_K_M.gguf` (2.49 GB single quant)                                   |
+| **`models/qwen3_8b_q4/`**       | `unsloth/Qwen3-8B-GGUF`               | Core Deep-Reasoning & Multi-Format Content Generation LLM              | `Qwen3-8B-Q4_K_M.gguf` (5.02 GB single quant)                                   |
+| **`models/bge_small_en_v1.5/`** | `BAAI/bge-small-en-v1.5`              | Dense Semantic Vector Embeddings for pgvector search                   | `model.safetensors` (133 MB), ONNX runtime models, tokenizer configs            |
 
 ### Downloader Utility (`scripts/download_models.py`)
+
 - Python script powered by `huggingface_hub` native API (with `hf` CLI fallback).
 - Multi-mirror download with exponential backoff retry for PaddleOCR models.
 - Selective downloads supported via `--select` flag.
@@ -88,6 +107,7 @@ normalization and validation boundary.
 ## 3. PP-StructureV3 Offline Integration
 
 ### Architecture & Local Weight Injection
+
 The analyzer in `backend/app/processors/pp_structure.py` automatically inspects `models/pp_structure_v3/` and injects local weight directories directly into the unified engine, requiring zero internet connectivity at runtime:
 
 ```python
@@ -115,8 +135,24 @@ self.engine = PPStructure(**kwargs)
 ```
 
 ### Memory Efficiency & Unified Inference
+
 - Rather than instantiating separate OCR and Layout classes, all components run in a **single unified `PPStructure` call** (`self.engine(img_np)`).
 - PaddlePaddle shares intermediate memory buffers across Layout $\to$ Table $\to$ OCR stages, keeping RAM usage to $\approx 600\text{--}800\text{ MB}$.
+
+### System Diagnostics & Model Health Inspection (`system_diagnostics.py` & `health.py`)
+
+A dedicated `SystemDiagnostics` service (`backend/app/services/system_diagnostics.py`) inspects filesystem weights and engine initializations without loading heavy models into RAM:
+
+- **Model Weight Presence**: Confirms the physical presence of staged weights in `models/` by validating directories and non-empty file contents:
+  - `pp_structure`: Engine initialized and callable.
+  - `layout_model`, `table_model`, `ocr_det_model`, `ocr_rec_model`: Component weights in `models/pp_structure_v3/`.
+  - `bge_small_en_v1.5`, `qwen2.5_vl_3b_q4`, `qwen3_4b_q4`, `qwen3_8b_q4`, `unichart_base_960`: Offline weights in `models/`.
+- **Engine Readiness**: Evaluates `pp_structure_initialized` and `fallback_available`.
+- **Storage Paths**: Confirms readiness of `raw_uploads` and `extracted_uploads` directories.
+- **Enriched Health Endpoint (`GET /api/v1/health`)**:
+  - Validates PostgreSQL connectivity asynchronously (`SELECT 1`).
+  - Reports overall health (`online` or `degraded` if DB is unavailable).
+  - Exposes granular boolean flags (`true` / `false`) for every model, engine, and storage directory to facilitate deployment verification and CI smoke tests.
 
 ---
 
@@ -188,9 +224,9 @@ Ai-Services/
 │   │   │       ├── api.py                    # Router aggregation
 │   │   │       └── endpoints/
 │   │   │           ├── documents.py          # Upload, status, semantic retrieval, list
-│   │   │           └── health.py             # Health check & engine status
+│   │   │           └── health.py             # Health check & multi-model diagnostic status
 │   │   ├── core/
-│   │   │   ├── config.py                     # Pydantic BaseSettings, model paths
+│   │   │   ├── config.py                     # Pydantic BaseSettings, allowed extensions, model paths
 │   │   │   └── logging.py                    # Structured logging configuration
 │   │   ├── database/
 │   │   │   ├── base.py                       # Declarative Base
@@ -203,6 +239,8 @@ Ai-Services/
 │   │   │   ├── base.py                       # RawDocumentElement dataclasses & ABC
 │   │   │   ├── pdf_parser.py                 # PyMuPDF document rasterizer
 │   │   │   ├── docx_parser.py                # python-docx document parser
+│   │   │   ├── ppt_parser.py                 # python-pptx presentation parser (slides, tables, images)
+│   │   │   ├── image_parser.py               # Standalone image parser (PNG, JPG, WEBP, BMP, TIFF)
 │   │   │   ├── pp_structure.py               # PP-Structure integration with local model paths
 │   │   │   ├── fallback_analyzer.py          # Rule-based PyMuPDF layout fallback
 │   │   │   └── extractor.py                  # Multi-modal extraction coordinator
@@ -211,8 +249,9 @@ Ai-Services/
 │   │   │   ├── processing_job.py             # Job status schemas
 │   │   │   └── semantic_document.py          # Unified System Contract schema
 │   │   ├── services/
+│   │   │   ├── system_diagnostics.py         # Offline model presence & system health evaluator
 │   │   │   ├── pipeline_service.py           # Full async processing pipeline coordinator
-│   │   │   ├── storage_service.py            # Disk storage for raw & cropped images
+│   │   │   ├── storage_service.py            # Disk storage & image crop persistence (save_image_crop)
 │   │   │   ├── semantic_fusion.py            # Reading order sorting & caption linking
 │   │   │   └── semantic_builder.py           # SemanticDocument JSON builder
 │   │   ├── utils/
@@ -251,7 +290,7 @@ Ai-Services/
 │   └── extracted/                            # Cropped visual regions (.gitkeep)
 ├── .env.example                              # Environment configuration template
 ├── .gitignore                                # Comprehensive Python, runtime & models/ ignore
-├── requirements.txt                          # Python dependencies definition
+├── requirements.txt                          # Python dependencies (includes python-pptx)
 ├── PHASE1_IMPLEMENTATION_SUMMARY.md          # Architectural summary
 └── PHASE1_TEST_REPORT.md                     # QA report (41 tests passing, 84% coverage)
 ```

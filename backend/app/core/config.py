@@ -4,7 +4,8 @@ Defines settings loaded from environment variables using Pydantic Settings.
 """
 
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, ClassVar, Set
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="ignore"
+        extra="ignore",
     )
 
     # Project Info
@@ -23,7 +24,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
 
-    # Database Configuration (PostgreSQL + asyncpg)
+    # Database Configuration
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str = "postgres"
@@ -34,16 +35,30 @@ class Settings(BaseSettings):
     @property
     def sync_database_url(self) -> str:
         if self.DATABASE_URL:
-            return self.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
-        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+            return self.DATABASE_URL.replace(
+                "postgresql+asyncpg://",
+                "postgresql://",
+            )
+
+        return (
+            f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
 
     @property
     def async_database_url(self) -> str:
         if self.DATABASE_URL:
             if not self.DATABASE_URL.startswith("postgresql+asyncpg://"):
-                return self.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
+                return self.DATABASE_URL.replace(
+                    "postgresql://",
+                    "postgresql+asyncpg://",
+                )
             return self.DATABASE_URL
-        return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+
+        return (
+            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
 
     # File Storage Paths
     BASE_DIR: Path = Path(__file__).resolve().parents[3]
@@ -56,11 +71,21 @@ class Settings(BaseSettings):
     PP_STRUCTURE_MODEL_DIR: Path = MODELS_DIR / "pp_structure_v3"
 
     # Processing & OCR Configuration
-    # Options: 'pp_structure' (production PaddleOCR) or 'rule_based' (fast PyMuPDF/fallback)
     DOC_ANALYZER_ENGINE: str = "pp_structure"
     ENABLE_OCR: bool = True
     MAX_UPLOAD_SIZE_MB: int = 50
-    ALLOWED_EXTENSIONS: List[str] = [".pdf", ".docx"]
+
+    ALLOWED_EXTENSIONS: ClassVar[Set[str]] = {
+        ".pdf",
+        ".docx",
+        ".pptx",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".bmp",
+        ".tiff",
+        ".webp",
+    }
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
