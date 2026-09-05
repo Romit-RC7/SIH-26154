@@ -54,12 +54,22 @@ class FallbackStructureAnalyzer(BaseStructureAnalyzer):
         """
         elements: List[RawDocumentElement] = []
 
+        # Compute coordinate scaling factor between PyMuPDF 72-DPI points and rendered raster image pixels
+        scale_x = (rendered_image.width / fitz_page.rect.width) if (rendered_image and fitz_page.rect.width > 0) else 1.0
+        scale_y = (rendered_image.height / fitz_page.rect.height) if (rendered_image and fitz_page.rect.height > 0) else 1.0
+
         # 1. Extract PyMuPDF Tables if available (fitz.Page.find_tables())
         try:
             tabs = fitz_page.find_tables()
             table_bboxes = []
             for tab in tabs:
                 t_bbox = [round(v, 2) for v in tab.bbox]
+                scaled_t_bbox = [
+                    round(t_bbox[0] * scale_x, 2),
+                    round(t_bbox[1] * scale_y, 2),
+                    round(t_bbox[2] * scale_x, 2),
+                    round(t_bbox[3] * scale_y, 2),
+                ]
                 table_bboxes.append(t_bbox)
                 df = tab.extract()
                 if df:
@@ -75,24 +85,27 @@ class FallbackStructureAnalyzer(BaseStructureAnalyzer):
                         html_table += "<tr>" + "".join(f"<td>{c or ''}</td>" for c in row) + "</tr>"
                     html_table += "</tbody></table>"
 
-                    # Crop table image if rendered_image exists
+                    # Crop table image if rendered_image exists using scaled coordinates
                     crop_img = None
                     if rendered_image:
-                        x0, y0, x1, y1 = [int(v) for v in t_bbox]
+                        x0 = int(round(t_bbox[0] * scale_x))
+                        y0 = int(round(t_bbox[1] * scale_y))
+                        x1 = int(round(t_bbox[2] * scale_x))
+                        y1 = int(round(t_bbox[3] * scale_y))
                         crop_img = rendered_image.crop((max(0, x0), max(0, y0), min(rendered_image.width, x1), min(rendered_image.height, y1)))
 
                     elements.append(
                         RawDocumentElement(
                             type="table",
                             page=page_number,
-                            bbox=t_bbox,
+                            bbox=scaled_t_bbox,
                             text="\n".join(" | ".join(str(c or "") for c in r) for r in df),
                             markdown=md_table,
                             html=html_table,
                             confidence=0.98,
                             image=crop_img,
                             table_data={"rows": df},
-                            attributes={"source": "pymupdf_table_engine"}
+                            attributes={"source": "pymupdf_table_engine", "raw_bbox_points": t_bbox}
                         )
                     )
         except Exception as e:
@@ -103,6 +116,12 @@ class FallbackStructureAnalyzer(BaseStructureAnalyzer):
         for b in blocks:
             # (x0, y0, x1, y1, text, block_no, block_type)
             bbox = [round(b[0], 2), round(b[1], 2), round(b[2], 2), round(b[3], 2)]
+            scaled_bbox = [
+                round(bbox[0] * scale_x, 2),
+                round(bbox[1] * scale_y, 2),
+                round(bbox[2] * scale_x, 2),
+                round(bbox[3] * scale_y, 2),
+            ]
             block_type = b[6]
             raw_text = b[4].strip()
 
@@ -111,17 +130,20 @@ class FallbackStructureAnalyzer(BaseStructureAnalyzer):
                     RawDocumentElement(
                         type="text",
                         page=page_number,
-                        bbox=bbox,
+                        bbox=scaled_bbox,
                         text=raw_text,
                         confidence=0.99,
-                        attributes={"block_no": b[5]}
+                        attributes={"block_no": b[5], "raw_bbox_points": bbox}
                     )
                 )
             elif block_type == 1:  # Image block
                 crop_img = None
                 if rendered_image:
                     try:
-                        x0, y0, x1, y1 = [int(v) for v in bbox]
+                        x0 = int(round(bbox[0] * scale_x))
+                        y0 = int(round(bbox[1] * scale_y))
+                        x1 = int(round(bbox[2] * scale_x))
+                        y1 = int(round(bbox[3] * scale_y))
                         crop_img = rendered_image.crop((max(0, x0), max(0, y0), min(rendered_image.width, x1), min(rendered_image.height, y1)))
                     except Exception:
                         pass
@@ -130,12 +152,81 @@ class FallbackStructureAnalyzer(BaseStructureAnalyzer):
                     RawDocumentElement(
                         type="figure",
                         page=page_number,
-                        bbox=bbox,
+                        bbox=scaled_bbox,
                         confidence=0.95,
                         image=crop_img,
-                        attributes={"block_no": b[5], "type": "embedded_image"}
+                        attributes={"block_no": b[5], "type": "embedded_image", "raw_bbox_points": bbox}
                     )
                 )
+
+        # 3. Extract Embedded Page Images and Figures (PyMuPDF get_image_info)
+        try:
+            image_infos = fitz_page.get_image_info(xrefs=True)
+            for img_info in image_infos:
+                raw_bbox = list(img_info.get("bbox", []))
+                if not raw_bbox or len(raw_bbox) < 4:
+                    continue
+
+                # Filter out tiny or zero-area artifacts
+                if (raw_bbox[2] - raw_bbox[0] < 10) or (raw_bbox[3] - raw_bbox[1] < 10):
+                    continue
+
+                # Check if this image bbox is inside an extracted table
+                is_in_table = False
+                for t_bb in table_bboxes:
+                    if (raw_bbox[0] >= t_bb[0] - 5 and raw_bbox[1] >= t_bb[1] - 5 and
+                        raw_bbox[2] <= t_bb[2] + 5 and raw_bbox[3] <= t_bb[3] + 5):
+                        is_in_table = True
+                        break
+                if is_in_table:
+                    continue
+
+                # Check if already added by block_type == 1
+                already_added = False
+                for el in elements:
+                    if el.type in ("figure", "image") and el.bbox:
+                        b_raw = el.attributes.get("raw_bbox_points", el.bbox)
+                        if abs(b_raw[0] - raw_bbox[0]) < 5 and abs(b_raw[1] - raw_bbox[1]) < 5:
+                            already_added = True
+                            break
+                if already_added:
+                    continue
+
+                scaled_img_bbox = [
+                    round(raw_bbox[0] * scale_x, 2),
+                    round(raw_bbox[1] * scale_y, 2),
+                    round(raw_bbox[2] * scale_x, 2),
+                    round(raw_bbox[3] * scale_y, 2),
+                ]
+
+                crop_img = None
+                if rendered_image:
+                    try:
+                        x0 = int(round(raw_bbox[0] * scale_x))
+                        y0 = int(round(raw_bbox[1] * scale_y))
+                        x1 = int(round(raw_bbox[2] * scale_x))
+                        y1 = int(round(raw_bbox[3] * scale_y))
+                        crop_img = rendered_image.crop((max(0, x0), max(0, y0), min(rendered_image.width, x1), min(rendered_image.height, y1)))
+                    except Exception as ce:
+                        logger.debug(f"Crop image error: {ce}")
+
+                elements.append(
+                    RawDocumentElement(
+                        type="figure",
+                        page=page_number,
+                        bbox=scaled_img_bbox,
+                        confidence=0.95,
+                        image=crop_img,
+                        attributes={
+                            "xref": img_info.get("xref"),
+                            "type": "embedded_image",
+                            "raw_bbox_points": [round(v, 2) for v in raw_bbox],
+                            "source": "pymupdf_image_info"
+                        }
+                    )
+                )
+        except Exception as img_err:
+            logger.debug(f"PyMuPDF get_image_info detection skipped: {img_err}")
 
         return elements
 

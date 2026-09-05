@@ -7,6 +7,7 @@ FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     DEBIAN_FRONTEND=noninteractive \
+    PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
     PYTHONPATH=/app
 
 # Install system dependencies for PyMuPDF, OpenCV, and PaddlePaddle

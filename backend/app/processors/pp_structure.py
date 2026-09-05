@@ -462,4 +462,3 @@ class PPStructureAnalyzer(BaseStructureAnalyzer):
 
 
 pp_structure_analyzer = PPStructureAnalyzer()
-
