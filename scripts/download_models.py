@@ -5,9 +5,9 @@ Uses native 'huggingface_hub' / new 'hf' CLI with resilient retry logic.
 
 Target Model Directory Layout:
   models/
-  ├── pp_structure_v3/       # Unified Layout (PicoDet), Table (SLANet), and OCR (PP-OCRv4)
+    ├── pp_structure_v3/       # PP-StructureV3 layout, OCR, tables, formulas, charts
   ├── unichart_base_960/     # ahmed-masry/unichart-base-960 (Universal Chart Reasoning)
-  ├── qwen2.5_vl_3b_q4/      # bartowski/Qwen2.5-VL-3B-Instruct-GGUF (Multimodal Vision LLM)
+  ├── qwen2.5_vl_3b_q4/      # unsloth/Qwen2.5-VL-3B-Instruct-GGUF (Multimodal Vision LLM)
   ├── qwen3_4b_q4/           # unsloth/Qwen3-4B-GGUF (Lightweight High-Efficiency LLM)
   ├── qwen3_8b_q4/           # unsloth/Qwen3-8B-GGUF (Core Reasoning LLM)
   └── bge_small_en_v1.5/     # BAAI/bge-small-en-v1.5 (pgvector Semantic Embeddings)
@@ -17,12 +17,7 @@ import argparse
 import shutil
 import subprocess
 import sys
-import tarfile
-import time
-import urllib.error
-import urllib.request
 from pathlib import Path
-
 
 # ==============================================================================
 # Hugging Face Model Specifications
@@ -61,36 +56,61 @@ HF_MODELS = {
     },
 }
 
-# PP-Structure v3 official components staged for single unified model call
-PP_STRUCTURE_URLS = {
+# ---------------------------------------------------------------------------
+# PP-StructureV3 components — downloaded from official HuggingFace repos.
+# These are the models that PaddleOCR 3.7.0 / PPStructureV3 actually ships
+# with.  Older V2 tarballs (PicoDet layout, SLANet v2.0) are NOT compatible
+# with PPStructureV3 and must NOT be used.
+#
+# Each entry uses huggingface_hub snapshot_download so we get the PaddleX
+# inference weights and metadata required by PPStructureV3.
+# ---------------------------------------------------------------------------
+PP_STRUCTURE_HF = {
     "layout": {
-        "urls": [
-            "https://paddleocr.bj.bcebos.com/ppstructure/models/layout/picodet_lcnet_x1_0_fgd_layout_cdla_infer.tar"
-        ],
+        "repo_id": "PaddlePaddle/PP-DocLayout-L",
         "dir_name": "layout",
-        "archive": "layout.tar",
+        "description": "PP-DocLayout-L (RT-DETR layout detection, PP-StructureV3)",
     },
     "table": {
-        "urls": [
-            "https://paddleocr.bj.bcebos.com/ppstructure/models/slanet/en_ppstructure_mobile_v2.0_SLANet_infer.tar"
-        ],
+        "repo_id": "PaddlePaddle/SLANet_plus",
         "dir_name": "table",
-        "archive": "table.tar",
+        "description": "SLANet_plus (Table structure recognition, PP-StructureV3)",
     },
     "det": {
-        "urls": [
-            "https://paddleocr.bj.bcebos.com/PP-OCRv4/chinese/ch_PP-OCRv4_det_infer.tar"
-        ],
+        "repo_id": "PaddlePaddle/PP-OCRv4_server_det",
         "dir_name": "det",
-        "archive": "det.tar",
+        "description": "PP-OCRv4 server detection model",
     },
     "rec": {
-        "urls": [
-            "https://paddleocr.bj.bcebos.com/PP-OCRv4/english/en_PP-OCRv4_rec_infer.tar",
-            "https://paddleocr.bj.bcebos.com/PP-OCRv3/english/en_PP-OCRv3_rec_infer.tar",
-        ],
+        "repo_id": "PaddlePaddle/PP-OCRv4_server_rec",
         "dir_name": "rec",
-        "archive": "rec.tar",
+        "description": "PP-OCRv4 server recognition model",
+    },
+    "table_cls": {
+        "repo_id": "PaddlePaddle/PP-LCNet_x1_0_table_cls",
+        "dir_name": "table_cls",
+        "description": "PP-LCNet table classification model",
+    },
+    "wired_table_cells": {
+        "repo_id": "PaddlePaddle/RT-DETR-L_wired_table_cell_det",
+        "dir_name": "wired_table_cells",
+        "description": "RT-DETR wired table cell detection model",
+    },
+    "wireless_table_cells": {
+        "repo_id": "PaddlePaddle/RT-DETR-L_wireless_table_cell_det",
+        "dir_name": "wireless_table_cells",
+        "description": "RT-DETR wireless table cell detection model",
+    },
+    "chart": {
+        "repo_id": "PaddlePaddle/PP-Chart2Table",
+        "dir_name": "chart",
+        "description": "PP-Chart2Table chart recognition model",
+        "required_files": ["model_state.pdparams", "inference.yml"],
+    },
+    "formula": {
+        "repo_id": "PaddlePaddle/PP-FormulaNet_plus-M",
+        "dir_name": "formula",
+        "description": "PP-FormulaNet_plus-M mathematical formula recognition model",
     },
 }
 
@@ -99,47 +119,29 @@ PP_STRUCTURE_URLS = {
 # Helper Functions
 # ==============================================================================
 
-def download_with_retry(urls: list, archive_file: Path, max_retries: int = 4, timeout: int = 30) -> bool:
-    """Download a file with multiple mirror support and exponential backoff retry."""
-    temp_file = archive_file.with_suffix(".tmp")
 
-    for url in urls:
-        for attempt in range(1, max_retries + 1):
-            try:
-                print(f"[*] Downloading from {url} (Attempt {attempt}/{max_retries})...")
-                req = urllib.request.Request(
-                    url,
-                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-                )
-                with urllib.request.urlopen(req, timeout=timeout) as resp, open(temp_file, "wb") as out_f:
-                    shutil.copyfileobj(resp, out_f)
-
-                if temp_file.exists() and temp_file.stat().st_size > 1024:
-                    temp_file.replace(archive_file)
-                    print("    [+] Download successful.")
-                    return True
-            except (urllib.error.URLError, TimeoutError, ConnectionResetError, OSError) as e:
-                print(f"    [!] Connection error on attempt {attempt}: {e}")
-                if temp_file.exists():
-                    temp_file.unlink()
-                if attempt < max_retries:
-                    sleep_time = attempt * 3
-                    print(f"    [*] Retrying in {sleep_time}s...")
-                    time.sleep(sleep_time)
-
-    return False
-
-
-def run_hf_download(repo_id: str, target_dir: Path, patterns: list = None):
+def run_hf_download(
+    repo_id: str,
+    target_dir: Path,
+    patterns: list = None,
+    required_files: list = None,
+):
     """
     Download from Hugging Face using huggingface_hub Python API (Primary)
     or fallback to the modern 'hf download' CLI.
     """
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    # Check if files already exist inside target directory
-    existing_models = list(target_dir.glob("*.gguf")) + list(target_dir.glob("*.safetensors")) + list(target_dir.glob("*.bin"))
-    if existing_models:
+    # A PP-Structure folder is complete only when its required metadata and
+    # weights are present. This avoids treating a partial download as valid.
+    if required_files:
+        is_complete = all((target_dir / name).exists() for name in required_files)
+    else:
+        is_complete = any(
+            target_dir.glob(pattern)
+            for pattern in ("*.gguf", "*.safetensors", "*.bin", "*.pdiparams", "*.pdmodel")
+        )
+    if is_complete:
         print(f"[*] Target files already exist in {target_dir}. Skipping.")
         return
 
@@ -182,53 +184,67 @@ def run_hf_download(repo_id: str, target_dir: Path, patterns: list = None):
 
 
 def download_pp_structure(base_dir: Path):
-    """Download and stage PP-Structure weights into a single unified directory."""
+    """Download PP-StructureV3 model weights from official HuggingFace repos.
+
+    Uses the same huggingface_hub / CLI fallback logic as HF_MODELS downloads.
+    Each component is downloaded into its own
+    subdirectory under models/pp_structure_v3/.
+
+    The correct V3 models are:
+      - layout : PaddlePaddle/PP-DocLayout-L     (RT-DETR, NOT the old PicoDet)
+      - table  : PaddlePaddle/SLANet_plus         (NOT the old SLANet v2.0)
+      - det    : PaddlePaddle/PP-OCRv4_server_det
+      - rec    : PaddlePaddle/PP-OCRv4_server_rec
+    - table_cls : PaddlePaddle/PP-LCNet_x1_0_table_cls
+    - wired_table_cells : PaddlePaddle/RT-DETR-L_wired_table_cell_det
+    - wireless_table_cells : PaddlePaddle/RT-DETR-L_wireless_table_cell_det
+    - chart : PaddlePaddle/PP-Chart2Table
+    - formula : PaddlePaddle/PP-FormulaNet_plus-M
+    """
     pp_root = base_dir / "pp_structure_v3"
     pp_root.mkdir(parents=True, exist_ok=True)
 
     print("\n" + "=" * 80)
     print(" Downloading PP-StructureV3 Components (Layout, Table, OCR)")
+    print(" Source: Official PaddlePaddle HuggingFace repos")
     print("=" * 80)
 
-    for comp, meta in PP_STRUCTURE_URLS.items():
+    for comp, meta in PP_STRUCTURE_HF.items():
         dest_folder = pp_root / meta["dir_name"]
-        if dest_folder.exists() and any(dest_folder.iterdir()):
-            print(f"[*] {comp} already exists at {dest_folder}. Skipping.")
+
+        required_files = meta.get("required_files", ["inference.pdiparams", "inference.yml"])
+        has_complete_model = all((dest_folder / name).exists() for name in required_files)
+
+        if has_complete_model:
+            print(f"[*] {comp} ({meta['description']}) already present at {dest_folder}. Skipping.")
             continue
+
+        # Warn and clean up if old V2 weights are detected (wrong model version)
+        has_old_v2 = (dest_folder / "model.pdiparams").exists() and not (dest_folder / "inference.json").exists()
+        if has_old_v2:
+            print(f"[!] WARNING: Old V2 weights detected in {dest_folder}. Removing before V3 download...")
+            shutil.rmtree(dest_folder, ignore_errors=True)
 
         dest_folder.mkdir(parents=True, exist_ok=True)
-        archive_file = pp_root / meta["archive"]
 
-        # Download with multi-URL fallback and retry
-        success = download_with_retry(meta["urls"], archive_file)
-        if not success:
-            print(f"[!] Failed to download {comp} after all retry attempts.")
-            continue
+        print(f"\n---> Fetching {meta['description']}...")
+        # Re-use the same HF download logic with pattern filter for paddle inference files
+        run_hf_download(
+            repo_id=meta["repo_id"],
+            target_dir=dest_folder,
+            patterns=[
+                "*.pdparams",
+                "*.pdiparams",
+                "*.pdmodel",
+                "*.pdiparams.info",
+                "*.yml",
+                "*.yaml",
+                "*.json",
+            ],
+            required_files=required_files,
+        )
 
-        print(f"[*] Extracting {meta['archive']} into {dest_folder}...")
-        with tarfile.open(archive_file, "r:*") as tar:
-            try:
-                tar.extractall(path=dest_folder, filter="data")
-            except TypeError:
-                tar.extractall(path=dest_folder)
-
-        # Flatten nested directory if the tar created an extra inner folder
-        subdirs = [d for d in dest_folder.iterdir() if d.is_dir()]
-        if len(subdirs) == 1:
-            inner = subdirs[0]
-            for item in inner.iterdir():
-                target = dest_folder / item.name
-                if not target.exists():
-                    item.replace(target)
-            try:
-                inner.rmdir()
-            except OSError:
-                pass
-
-        if archive_file.exists():
-            archive_file.unlink()
-
-    print(f"[+] PP-Structure models unified at: {pp_root}")
+    print(f"\n[+] PP-StructureV3 models staged at: {pp_root}")
 
 
 # ==============================================================================

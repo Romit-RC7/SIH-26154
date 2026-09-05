@@ -14,21 +14,31 @@ Phase 1 provides the foundational document intelligence and semantic extraction 
 
 ```
 PDF / DOCX Upload
-       ↓
+  ↓
 Document Parser (PyMuPDF / docx)
-       ↓
-PP-StructureV3 Layout & Table Engine
-       ↓
-Multi-Modal Extraction Layer (crops figures & tables to disk)
-       ↓
+  ↓
+Offline Layout + OCR Stage
+  ↓
+Region Crops and Intermediate Recognition Document
+  ↓
+Table → Formula → Chart → Visual Recognition (staged)
+  ↓
+Qwen3-4B Fusion Stage
+  ↓
 Semantic Fusion Engine (reading order, captions, structure)
-       ↓
+  ↓
 Semantic Document Builder
        ↓
 Unified Semantic Document JSON (Pydantic Schema)
        ↓
 PostgreSQL Storage (JSONB document + relational elements)
 ```
+
+    Recognition stages are resource-aware. Layout and OCR may share a loaded stage;
+    table, formula, chart, Qwen2.5-VL, and Qwen3 models are loaded sequentially,
+    with at most one or two model groups resident according to available RAM/VRAM.
+    All model paths are local and missing optional weights must disable only that
+    stage, never trigger a runtime download.
 
 ---
 

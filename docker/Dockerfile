@@ -27,10 +27,10 @@ WORKDIR /app
 # Copy dependency definition
 COPY requirements.txt /app/requirements.txt
 
-# Install Python packages
+# Install Python packages with increased timeout and retries
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir paddlepaddle==3.0.0 paddleocr==3.7.0 "paddlex[ocr]>=3.7.0,<3.8.0"
+    pip install --no-cache-dir --default-timeout=1000 --retries 5 -r requirements.txt && \
+    pip install --no-cache-dir --default-timeout=1000 --retries 5 paddlepaddle==3.0.0 paddleocr==3.7.0 "paddlex[ocr,multimodal]>=3.7.0,<3.8.0"
 
 # Copy application source code
 COPY backend/ /app/backend/

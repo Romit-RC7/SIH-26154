@@ -46,7 +46,7 @@ class Settings(BaseSettings):
         return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     # File Storage Paths
-    BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
+    BASE_DIR: Path = Path(__file__).resolve().parents[3]
     UPLOAD_DIR: Path = BASE_DIR / "uploads"
     RAW_UPLOAD_DIR: Path = UPLOAD_DIR / "raw"
     EXTRACTED_UPLOAD_DIR: Path = UPLOAD_DIR / "extracted"

@@ -35,6 +35,15 @@ Raw Multimodal Input (PDF / DOCX)
   - Assembly & validation of `SemanticDocument` JSON.
   - PostgreSQL 16 persistence (JSONB document + relational elements).
 
+#### Recognition Execution Model
+
+The recognition pipeline is staged to support offline execution on constrained
+hardware. Layout and OCR run first and produce stable region IDs and crops.
+Table, formula, and chart recognition then run only on their matching regions,
+followed by Qwen2.5-VL for visual regions and Qwen3-4B for structured fusion.
+The resource manager limits resident model groups based on available RAM/VRAM,
+unloads each stage before the next one, and never downloads weights at runtime.
+
 ---
 
 ### Phase 2: Visual Intelligence (Qwen2.5-VL-3B Q4)
@@ -44,6 +53,11 @@ Raw Multimodal Input (PDF / DOCX)
   - Reads `image_path` from element content.
   - Inferences using Qwen2.5-VL-3B (quantized Q4 via Ollama / llama.cpp / vLLM).
   - Injects generated descriptions, data trends, diagram flows, and key takeaways into `element.content.raw_attributes["visual_analysis"]`.
+
+Chart parsing and formula recognition are separate specialist stages before
+visual fusion: PP-Chart2Table handles chart-to-table extraction, while
+PP-FormulaNet handles formula-to-LaTeX extraction. Their outputs retain the
+source element ID and are passed to the fusion model as structured evidence.
 
 ---
 

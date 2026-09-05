@@ -28,9 +28,13 @@ PDF / DOCX Upload
        ↓
 Document Parsers (PyMuPDF / python-docx)
        ↓
-Layout & Structure Analysis (Primary: Offline PP-StructureV3 | Backup: PyMuPDF Fallback)
+Offline Layout + OCR Analysis (Primary: PP-StructureV3 | Backup: PyMuPDF Fallback)
        ↓
-Multi-Modal Visual Extraction (disk persistence of cropped tables/images/charts)
+Intermediate Region Document (stable element IDs and disk-persisted crops)
+       ↓
+Staged Table / Formula / Chart / Vision Recognition
+       ↓
+Qwen3-4B Structured Fusion
        ↓
 Semantic Fusion Engine (reading order sort, caption-to-visual linking)
        ↓
@@ -60,6 +64,24 @@ All required AI models have been downloaded, verified, and staged locally in ded
 - Python script powered by `huggingface_hub` native API (with `hf` CLI fallback).
 - Multi-mirror download with exponential backoff retry for PaddleOCR models.
 - Selective downloads supported via `--select` flag.
+
+PP-Structure model groups are stored under `models/pp_structure_v3/` as
+separate local packages for layout, OCR, table recognition, formulas, and
+charts. Runtime services must load only the group needed for the current stage
+and must not download weights.
+
+### Staged Recognition Lifecycle
+
+1. Layout and OCR identify regions and produce text, captions, and crops.
+2. Table recognition processes only table regions.
+3. Formula recognition processes only formula regions.
+4. Chart recognition processes only chart regions.
+5. Qwen2.5-VL processes figures and images.
+6. Qwen3-4B fuses the structured results into summaries, claims, and relations.
+
+Each stage updates stable element IDs in an intermediate recognition document;
+the Semantic Fusion Engine and Semantic Document Builder remain the final
+normalization and validation boundary.
 
 ---
 
