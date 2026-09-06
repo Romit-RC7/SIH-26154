@@ -1,9 +1,9 @@
 # SIH-26154 — Semantic Document Processing System: Technical Context
 
-> **Project**: AI-Powered Content Transformation Platform (SIH-26154)  
-> **Phase**: Milestone 1 — Foundational Semantic Document Processing System & Model Weights Staging  
-> **Updated**: September 6, 2026  
-> **Repository**: [https://github.com/Romit-RC7/SIH-26154.git](https://github.com/Romit-RC7/SIH-26154.git)  
+> **Project**: AI-Powered Content Transformation Platform (SIH-26154)
+> **Phase**: Milestone 1 Complete + Knowledge & Retrieval Layer (Phase 3) Complete
+> **Updated**: September 6, 2026 (Session 8)
+> **Repository**: [https://github.com/Romit-RC7/SIH-26154.git](https://github.com/Romit-RC7/SIH-26154.git)
 > **Workspace**: `Ai-Services`
 
 ---
@@ -304,16 +304,157 @@ Ai-Services/
 
 ---
 
-## 7. Next Milestone: Phase 2 Roadmap
+## 6. Knowledge & Retrieval Layer (Phase 3) — Complete
 
-With Phase 1 document intelligence, offline model staging, and PP-Structure integration complete, the platform is ready for Phase 2:
+> See `knowledge_retrieval.md` for the full technical reference.
 
-1. **UniChart + Qwen2.5-VL Visual Intelligence Pipeline**:
-   - Ingest cropped figures and charts from `uploads/extracted/`.
-   - Run `unichart_base_960` for tabular data extraction from plots/charts.
-   - Run `Qwen2.5-VL-3B Q4` for diagram explanation, trend analysis, and descriptive takeaways.
-2. **Dense Vector Embeddings & pgvector**:
-   - Run `bge_small_en_v1.5` to generate 384/768-dim embeddings for all text and table chunks.
-   - Populate pgvector tables for sub-second semantic retrieval.
-3. **Intent & Content Orchestration**:
-   - Synthesize multi-format outputs (Executive Summary, LinkedIn, PPT Slides, Infographics) using `Qwen3-4B` and `Qwen3-8B`.
+### Architecture
+
+```
+Semantic Document JSON
+    → Text Cleaner (NFKC, whitespace, dehyphenation)
+    → Semantic Chunker (text/table/visual-aware, context prefix)
+    → BGE Small EN v1.5 (384-dim dense vectors, transformers backend)
+    → PostgreSQL document_chunks + pgvector
+    ← Cosine Similarity Retrieval (Python, top_k ranked)
+    → Knowledge Engine (Qwen3-4B GGUF or deterministic fallback)
+    → KnowledgePackage (self-contained orchestrator input)
+```
+
+### Key Files Added
+
+| File | Purpose |
+|------|---------|
+| `backend/app/services/embedding/text_cleaner.py` | Unicode normalization, whitespace collapsing |
+| `backend/app/services/embedding/chunker.py` | Structure-aware chunker with context prefix |
+| `backend/app/services/embedding/embedding_service.py` | Clean → chunk → embed → persist orchestrator |
+| `backend/app/services/model_initializer/bge_initializer.py` | BGE lazy loader (transformers backend) |
+| `backend/app/services/retrieval_service.py` | Cosine similarity search over pgvector |
+| `backend/app/services/knowledge_engine.py` | Knowledge assembly + Qwen3-4B / deterministic |
+| `backend/app/models/document_chunk.py` | `document_chunks` table + custom `Vector(384)` type |
+| `backend/app/schemas/intent.py` | `IntentAndPersonalization` schema + enums |
+| `backend/app/schemas/knowledge_package.py` | `KnowledgePackage` output contract schema |
+| `backend/app/api/v1/endpoints/knowledge.py` | 5 REST endpoints (embed / search / assemble) |
+
+### KnowledgePackage — What It Contains
+
+The `KnowledgePackage` is the **sole input** to the Content Orchestrator (Phase 4). It contains:
+- `intent` — user's `output_type`, `audience`, `tone`, `objective`, `focus_keywords`
+- `retrieved_evidence[]` — top-k semantically retrieved chunks with cosine scores
+- `entities[]` — named entities (Qwen3-4B or heuristic NER)
+- `claims[]` — factual propositions with source element citations
+- `key_metrics[]` — numeric values extracted with surrounding context
+- `tables[]` — GFM markdown tables from the document
+- `visual_insights[]` — figure/chart descriptions and image paths
+- `strategy` — `headline_hook`, `key_themes`, `suggested_structure` (per output format), `recommended_cta`, `tone_guidelines`
+- `orchestrator_prompt_context` — pre-compiled dense markdown block ready for prompt injection
+
+### Architecture Decision
+
+The Content Orchestrator will have **separate prompt templates per output format** (LinkedIn, Twitter, Executive Summary, Infographic, etc.). All templates consume the same `KnowledgePackage`. Format-specific constraints (word limits, character limits, section counts) are the orchestrator's responsibility — the knowledge layer provides **what to say**, the orchestrator determines **how to format it**.
+
+---
+
+## 7. Codebase Inventory (Updated Session 8)
+
+```
+Ai-Services/
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── deps.py
+│   │   │   └── v1/
+│   │   │       ├── api.py
+│   │   │       └── endpoints/
+│   │   │           ├── documents.py        # Upload, status, semantic retrieval
+│   │   │           ├── health.py           # Health check & model diagnostics
+│   │   │           └── knowledge.py        # ★ NEW: embed / search / assemble endpoints
+│   │   ├── core/
+│   │   │   ├── config.py
+│   │   │   └── logging.py
+│   │   ├── database/
+│   │   │   ├── base.py
+│   │   │   └── session.py                  # init_db() creates vector extension + document_chunks
+│   │   ├── models/
+│   │   │   ├── document.py                 # + chunks relationship
+│   │   │   ├── document_chunk.py           # ★ NEW: DocumentChunk + custom Vector(384)
+│   │   │   ├── document_element.py
+│   │   │   └── processing_job.py
+│   │   ├── processors/
+│   │   │   ├── base.py
+│   │   │   ├── pdf_parser.py
+│   │   │   ├── docx_parser.py
+│   │   │   ├── ppt_parser.py
+│   │   │   ├── image_parser.py
+│   │   │   ├── pp_structure.py
+│   │   │   ├── fallback_analyzer.py
+│   │   │   └── extractor.py
+│   │   ├── schemas/
+│   │   │   ├── document.py
+│   │   │   ├── processing_job.py
+│   │   │   ├── semantic_document.py        # Canonical contract
+│   │   │   ├── intent.py                   # ★ NEW: IntentAndPersonalization + enums
+│   │   │   └── knowledge_package.py        # ★ NEW: KnowledgePackage output contract
+│   │   ├── services/
+│   │   │   ├── embedding/                  # ★ NEW package
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── text_cleaner.py
+│   │   │   │   ├── chunker.py
+│   │   │   │   └── embedding_service.py
+│   │   │   ├── model_initializer/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── bge_initializer.py      # ★ NEW
+│   │   │   │   ├── pp_structure_initializer.py
+│   │   │   │   ├── qwen_initializers.py
+│   │   │   │   └── unichart_initializer.py
+│   │   │   ├── knowledge_engine.py         # ★ NEW: Qwen3-4B + deterministic assembly
+│   │   │   ├── retrieval_service.py        # ★ NEW: pgvector cosine search
+│   │   │   ├── system_diagnostics.py
+│   │   │   ├── pipeline_service.py
+│   │   │   ├── storage_service.py
+│   │   │   ├── semantic_fusion.py
+│   │   │   └── semantic_builder.py
+│   │   └── main.py
+│   └── tests/                              # 66+ tests passing
+├── docker/
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   └── .dockerignore
+├── models/
+│   ├── pp_structure_v3/
+│   ├── unichart_base_960/
+│   ├── qwen2.5_vl_3b_q4/
+│   ├── qwen3_4b_q4/
+│   ├── qwen3_8b_q4/
+│   └── bge_small_en_v1.5/
+├── scripts/
+│   └── download_models.py
+├── uploads/
+│   ├── raw/
+│   └── extracted/
+├── requirements.txt                        # includes pgvector>=0.3.0
+├── context.md                              # THIS FILE
+├── history.md                              # Session changelog
+└── knowledge_retrieval.md                  # ★ NEW: Full Phase 3 reference doc
+```
+
+---
+
+## 8. Next: Phase 4 — Content Orchestrator
+
+**Input**: `KnowledgePackage` from `/api/v1/knowledge/assemble/{document_id}`
+
+**Architecture**:
+- One format-specific prompt template per `output_type`
+- Main model: Qwen3-8B Q4 GGUF (`models/qwen3_8b_q4/`) for deep reasoning + generation
+- Each template injects `orchestrator_prompt_context` + format constraints into Qwen3-8B prompt
+- Output: structured generated content in the target format
+
+**Supported output formats** (each needs its own prompt template):
+- `linkedin_post` — 150–300 words, hook + insight + CTA + hashtags
+- `twitter_thread` — 5–8 tweets, each ≤ 280 chars, numbered thread
+- `executive_summary` — formal multi-section report with headers
+- `presentation_deck` — slide-by-slide structured brief
+- `infographic_brief` — visual-first, stats + minimal prose
+- `video_script` — scene-structured narrative with visual cues
+

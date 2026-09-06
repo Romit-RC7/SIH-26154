@@ -47,9 +47,10 @@ class SemanticFusionEngine:
             has_text = bool(item.text and item.text.strip())
             has_formatted = bool(item.markdown or item.html)
             has_image = bool(saved_image)
+            has_caption = bool(item.caption and item.caption.strip())
 
             # Skip empty background layout artifacts that contain zero content
-            if not (has_text or has_formatted or has_image):
+            if not (has_text or has_formatted or has_image or has_caption):
                 continue
 
             elem_id = item.attributes.get("element_id") or f"elem_{document_id[:8]}_{item.page}_{idx + 1}"

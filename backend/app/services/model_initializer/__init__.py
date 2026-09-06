@@ -15,6 +15,10 @@ from backend.app.services.model_initializer.unichart_initializer import (
     UniChartInitializer,
     unichart_initializer,
 )
+from backend.app.services.model_initializer.bge_initializer import (
+    BGEModelInitializer,
+    bge_initializer,
+)
 
 __all__ = [
     "QwenFusionInitializer",
@@ -26,4 +30,6 @@ __all__ = [
     "pp_structure_initializer",
     "UniChartInitializer",
     "unichart_initializer",
+    "BGEModelInitializer",
+    "bge_initializer",
 ]

@@ -126,7 +126,10 @@ def test_fallback_analyzer_when_pp_structure_unavailable():
     Force PP-Structure to be unavailable and verify fallback analyzer executes smoothly
     without crashing the pipeline.
     """
-    analyzer = PPStructureAnalyzer()
+    mock_init = MagicMock()
+    mock_init.is_available.return_value = False
+    mock_init.load.side_effect = RuntimeError("PP-Structure engine is not available")
+    analyzer = PPStructureAnalyzer(initializer=mock_init)
     analyzer._initialized = False
     analyzer.engine = None
 
@@ -257,10 +260,12 @@ def test_pp_structure_v3_native_parsing():
 
 def test_pp_structure_initialization_failure_fallback():
     """Verify analyzer handles initialization errors cleanly without crashing."""
-    with patch("paddleocr.PPStructureV3", side_effect=ImportError("Mocked missing module")):
-        analyzer = PPStructureAnalyzer()
-        assert analyzer.is_available() is False
-        assert analyzer.engine is None
+    mock_init = MagicMock()
+    mock_init.is_available.return_value = False
+    mock_init.load.side_effect = ImportError("Mocked missing module")
+    analyzer = PPStructureAnalyzer(initializer=mock_init)
+    assert analyzer.is_available() is False
+    assert analyzer.engine is None
 
 
 def test_extractor_runtime_failure_fallback(tmp_path):

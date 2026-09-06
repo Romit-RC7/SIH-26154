@@ -1,4 +1,78 @@
 # SIH-26154 — Change History
+
+## Session 8 — 2026-09-06 — Knowledge & Retrieval Layer: Verification, Fixes & Documentation
+
+### What was done
+
+- **Diagnosed and fixed `/api/v1/knowledge/embed/{document_id}` 500 error**:
+  - Root cause: `pgvector>=0.3.0` Python package was in `requirements.txt` but NOT installed in the Docker image (image was built before the package was added).
+  - Fix: `docker exec sih_backend pip install pgvector>=0.3.0` + `docker restart sih_backend`. No rebuild needed.
+  - Going forward: any new `requirements.txt` packages can be hot-installed with `docker exec pip install <pkg>` without a full 30+ minute rebuild.
+
+- **Verified BGE embedding pipeline end-to-end in Docker**:
+  - `embed_query("key findings")` → valid 384-dim non-zero float vector confirmed.
+  - `retrieval_service.search()` → 3 chunks retrieved with cosine scores 0.61 / 0.59 / 0.58 for document `33a2e458-cb72-462a-a108-19e46dc77d5e`.
+  - Confirmed: embeddings in DB are `type=list, len=384` — custom Vector type `bind_processor`/`result_processor` working correctly.
+
+- **Fixed Swagger UX — search returning `[]`**:
+  - Cause: Swagger placeholder default `"document_id": "string"` — literal text, not a real UUID.
+  - Solution: Directed user to use `GET /api/v1/knowledge/search` which renders individual input fields for `query`, `document_id`, `top_k`, `min_similarity`.
+
+- **Added `use_llm: bool` flag to `AssembleRequest`**:
+  - `use_llm: false` → instant deterministic extraction (no Qwen3-4B cold-start wait).
+  - `use_llm: true` (default) → full Qwen3-4B GGUF reasoning path.
+  - File: `backend/app/api/v1/endpoints/knowledge.py`.
+
+- **Created `knowledge_retrieval.md`**:
+  - Full reference document for the Knowledge & Retrieval Layer.
+  - Covers: data flow diagram, all sub-components, API endpoints, complete `KnowledgePackage` output contract (TypeScript-style schema), `orchestrator_prompt_context` structure, per-format `suggested_structure` lookup table, file map, and known gotchas.
+
+- **Updated `context.md`**: Added Knowledge & Retrieval Layer sections (Section 6 & updated codebase inventory).
+
+- **Architecture decision — KnowledgePackage as universal orchestrator input**:
+  - The Content Orchestrator (Phase 4) will have **separate prompt templates per output format** (LinkedIn, Twitter, Exec Summary, Infographic, etc.).
+  - All format-specific prompt templates will consume the same `KnowledgePackage` structure — format constraints (word limits, char limits, section counts) are the orchestrator's responsibility, NOT the knowledge layer's.
+  - This is the correct separation of concerns: knowledge layer = WHAT to say; orchestrator prompts = HOW to format it.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `backend/app/api/v1/endpoints/knowledge.py` | Added `use_llm: bool = True` field to `AssembleRequest` |
+| `knowledge_retrieval.md` | **NEW** — Complete reference for Knowledge & Retrieval Layer |
+| `context.md` | Added Session 8 additions (§6 Knowledge & Retrieval, updated codebase inventory) |
+| `history.md` | This entry |
+
+---
+
+## Session 7 — 2026-09-06 — Knowledge & Retrieval Layer (BGE Embeddings + pgvector + Qwen3-4B Knowledge Engine)
+
+### What was done
+- **Created Embedding Engine (`backend/app/services/embedding/`)**:
+  - `text_cleaner.py`: Unicode NFKC normalization, whitespace collapsing, control character removal, markdown table formatting, and dehyphenation.
+  - `chunker.py`: Semantic, structure-aware chunking for text paragraphs, headers, tables (header-preservation across row splits), and visual captions with contextual metadata prefixes (`[Doc: {title} | Page {page} | Type: {type}]`).
+  - `bge_initializer.py`: Offline lazy model loader and inference engine for `models/bge_small_en_v1.5/` producing normalized 384-dimensional dense vectors with query prefix support (`Represent this sentence for searching relevant passages: `) and fallback support.
+  - `embedding_service.py`: Orchestrates full document cleaning, chunking, BGE dense embedding generation, and atomic database persistence.
+- **Created Database Model for Chunks & pgvector (`backend/app/models/document_chunk.py`)**:
+  - `DocumentChunk` table storing `(id, document_id, element_id, chunk_index, chunk_type, page, content, cleaned_text, chunk_metadata, embedding Vector(384))`.
+  - Added `chunks` relationship to `Document` model.
+- **Built Vector Retrieval Service (`backend/app/services/retrieval_service.py`)**:
+  - Semantic similarity search using cosine distance ranking over 384-dim BGE embeddings with filtering by `document_id`, `chunk_types`, `page_range`, `top_k`, and `min_similarity`.
+- **Created Intent & Personalization Schemas (`backend/app/schemas/intent.py`)**:
+  - `IntentAndPersonalization`: Captures user configuration (`output_type` e.g. LinkedIn, PPT, Exec Summary; `audience`, `tone`, `language`, `objective`, `detail_level`, `focus_keywords`, `custom_instructions`).
+- **Built Knowledge Engine & Output Contract (`backend/app/services/knowledge_engine.py` & `knowledge_package.py`)**:
+  - Consumes Semantic Document JSON, pgvector semantic search retrieval, and user intent.
+  - Utilizes `Qwen3-4B` (`models/qwen3_4b_q4/`) for reasoning, entity verification, factual claim extraction with source element citations, metric/table structuring, and content strategy generation.
+  - Assembles `KnowledgePackage`: Standardized structured payload containing retrieved evidence, verified claims, key metrics, tables, visual insights, content strategy, and a high-density pre-compiled `orchestrator_prompt_context` Markdown block designed specifically for direct ingestion by Phase 5 Content Orchestrator.
+- **Added REST API Endpoints (`backend/app/api/v1/endpoints/knowledge.py`)**:
+  - `POST /api/v1/knowledge/embed/{document_id}`: Triggers document chunking and BGE embedding generation into pgvector.
+  - `POST /api/v1/knowledge/search`: Vector similarity search endpoint.
+  - `POST /api/v1/knowledge/assemble`: Main Knowledge Engine endpoint returning the complete `KnowledgePackage`.
+- **Created Test Suite (25 new tests, 66/66 total tests passing)**:
+  - `test_text_cleaner.py`, `test_chunker.py`, `test_bge_initializer.py`, `test_embedding_service.py`, `test_retrieval_service.py`, `test_knowledge_engine.py`, `test_knowledge_api.py`.
+
+---
+
 # Session 6 — 2026-09-05 — Staged Recognition and Initializer Architecture
 
 ## Architecture decision

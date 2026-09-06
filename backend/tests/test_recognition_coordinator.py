@@ -42,6 +42,10 @@ def test_recognizes_formula_and_chart_sequentially(tmp_path, monkeypatch):
         "backend.app.services.recognition.coordinator.RecognitionCoordinator._create_model",
         staticmethod(fake_create_model),
     )
+    monkeypatch.setattr(
+        "backend.app.services.recognition.chart_service.ChartRecognitionService._load_model",
+        lambda self: fake_create_model(self.model_name, self.model_dir),
+    )
 
     elements = [
         RawDocumentElement("text", 1, image=Image.new("RGB", (4, 4)), attributes={"recognition_type": "formula"}),
