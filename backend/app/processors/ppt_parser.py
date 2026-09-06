@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import List, Tuple
 
 from PIL import Image
-from pptx import Presentation
+
+try:
+    from pptx import Presentation
+except ImportError:  # pragma: no cover
+    Presentation = None
 
 from backend.app.processors.base import ParsedPage, RawDocumentElement
 from backend.app.core.logging import logger
@@ -29,6 +33,9 @@ class PPTParser:
 
         if not file_path.exists():
             raise FileNotFoundError(f"PPTX not found: {file_path}")
+
+        if Presentation is None:
+            raise RuntimeError("python-pptx is required to parse PPTX files")
 
         prs = Presentation(str(file_path))
 

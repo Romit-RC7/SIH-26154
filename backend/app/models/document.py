@@ -14,6 +14,7 @@ from backend.app.database.base import Base, TimestampMixin
 if TYPE_CHECKING:
     from backend.app.models.document_element import DocumentElement
     from backend.app.models.processing_job import ProcessingJob
+    from backend.app.models.document_chunk import DocumentChunk
 
 
 class DocumentStatus(str, enum.Enum):
@@ -71,6 +72,13 @@ class Document(Base, TimestampMixin):
         back_populates="document",
         cascade="all, delete-orphan",
         order_by="desc(ProcessingJob.created_at)"
+    )
+
+    chunks: Mapped[List["DocumentChunk"]] = relationship(
+        "DocumentChunk",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentChunk.chunk_index"
     )
 
     def __repr__(self) -> str:

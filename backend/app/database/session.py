@@ -68,6 +68,11 @@ def get_sync_db() -> Session:
 async def init_db() -> None:
     """Initialize database tables."""
     # Import all models to ensure they are registered with Base.metadata
-    from backend.app.models import document, document_element, processing_job  # noqa
+    from backend.app.models import document, document_element, document_chunk, processing_job  # noqa
     async with async_engine.begin() as conn:
+        try:
+            from sqlalchemy import text
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        except Exception:
+            pass
         await conn.run_sync(Base.metadata.create_all)
