@@ -12,6 +12,7 @@ from backend.app.processors.docx_parser import docx_parser
 from backend.app.processors.pp_structure import pp_structure_analyzer
 from backend.app.processors.fallback_analyzer import fallback_analyzer
 from backend.app.services.storage_service import storage_service
+from backend.app.services.recognition import recognition_coordinator
 from backend.app.core.config import settings
 from backend.app.core.logging import logger
 import fitz
@@ -23,7 +24,9 @@ class DocumentExtractor:
     def extract_document(
         self,
         file_path: Path,
-        document_id: str
+        document_id: str,
+        run_specialist_recognition: bool = True,
+        unload_structure: bool = True,
     ) -> Tuple[List[RawDocumentElement], dict]:
         """
         Runs multi-modal layout analysis, saves visual crops, and returns normalized elements.
@@ -31,16 +34,18 @@ class DocumentExtractor:
         extension = file_path.suffix.lower()
 
         if extension == ".pdf":
-            return self._extract_pdf(file_path, document_id)
+            return self._extract_pdf(file_path, document_id, run_specialist_recognition, unload_structure)
         elif extension == ".docx":
-            return self._extract_docx(file_path, document_id)
+            return self._extract_docx(file_path, document_id, run_specialist_recognition, unload_structure)
         else:
             raise ValueError(f"Unsupported document extension: {extension}")
 
     def _extract_pdf(
         self,
         file_path: Path,
-        document_id: str
+        document_id: str,
+        run_specialist_recognition: bool = True,
+        unload_structure: bool = True,
     ) -> Tuple[List[RawDocumentElement], dict]:
         """Process PDF through page rendering and structure analysis."""
         pages, raw_blocks, meta = pdf_parser.parse(file_path)
@@ -99,13 +104,19 @@ class DocumentExtractor:
 
             processed_elements.append(elem)
 
+        if run_specialist_recognition:
+            recognition_coordinator.recognize(processed_elements)
+        if unload_structure:
+            pp_structure_analyzer.unload()
         meta["extracted_elements_count"] = len(processed_elements)
         return processed_elements, meta
 
     def _extract_docx(
         self,
         file_path: Path,
-        document_id: str
+        document_id: str,
+        run_specialist_recognition: bool = True,
+        unload_structure: bool = True,
     ) -> Tuple[List[RawDocumentElement], dict]:
         """Process DOCX paragraphs, tables, and images."""
         _, raw_elements, meta = docx_parser.parse(file_path)
@@ -128,6 +139,11 @@ class DocumentExtractor:
                     logger.warning(f"Could not persist crop for DOCX image {element_id}: {e}")
 
             processed.append(elem)
+
+        if run_specialist_recognition:
+            recognition_coordinator.recognize(processed)
+        if unload_structure:
+            pp_structure_analyzer.unload()
 
         meta["extracted_elements_count"] = len(processed)
         return processed, meta

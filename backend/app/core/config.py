@@ -55,12 +55,21 @@ class Settings(BaseSettings):
     MODELS_DIR: Path = BASE_DIR / "models"
     PP_STRUCTURE_MODEL_DIR: Path = MODELS_DIR / "pp_structure_v3"
 
-    # Processing & OCR Configuration
+    # Processing, GPU & OCR Configuration
     # Options: 'pp_structure' (production PaddleOCR) or 'rule_based' (fast PyMuPDF/fallback)
     DOC_ANALYZER_ENGINE: str = "pp_structure"
     ENABLE_OCR: bool = True
+    USE_GPU: bool = True
+    N_GPU_LAYERS: int = -1  # -1 offloads all layers to GPU in llama-cpp-python
+    RECOGNITION_BATCH_SIZE: int = 4
+    RECOGNITION_BATCH_WAIT_SECONDS: float = 0.5
     MAX_UPLOAD_SIZE_MB: int = 50
     ALLOWED_EXTENSIONS: List[str] = [".pdf", ".docx"]
+
+    # LLM & Vision Model Configuration
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "qwen2.5:latest"
+    QWEN_VISION_N_CTX: int = 4096
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]

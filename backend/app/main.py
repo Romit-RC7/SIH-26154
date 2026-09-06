@@ -32,7 +32,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Foundational Semantic Document Processing Engine for Smart India Hackathon (SIH-26154).",
+    description=(
+        "Offline semantic document processing API for PDF and DOCX files. "
+        "Uploads are queued into bounded batches. The pipeline runs PP-Structure "
+        "layout/OCR/table extraction, formula and chart recognition, and optional "
+        "Qwen vision enrichment before deterministic semantic fusion and schema validation."
+    ),
+    openapi_tags=[
+        {"name": "Documents", "description": "Upload, monitor, list, and retrieve processed documents."},
+        {"name": "System", "description": "Service health and runtime diagnostics."},
+        {"name": "Root", "description": "Service metadata and documentation links."},
+    ],
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -54,7 +64,7 @@ app.mount("/uploads", StaticFiles(directory=str(settings.UPLOAD_DIR)), name="upl
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
-@app.get("/", tags=["Root"])
+@app.get("/", tags=["Root"], summary="Service Information")
 def root():
     return {
         "service": settings.PROJECT_NAME,

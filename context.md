@@ -28,11 +28,11 @@ PDF / DOCX Upload
        ↓
 Document Parsers (PyMuPDF / python-docx)
        ↓
-Offline Layout + OCR Analysis (Primary: PP-StructureV3 | Backup: PyMuPDF Fallback)
+Offline PP-Structure Analysis (Layout + OCR + Tables; Primary: PP-StructureV3 | Backup: PyMuPDF Fallback)
        ↓
 Intermediate Region Document (stable element IDs and disk-persisted crops)
        ↓
-Staged Table / Formula / Chart / Vision Recognition
+Formula + Chart Recognition, then Qwen2.5-VL Image/Figure Recognition
        ↓
 Qwen3-4B Structured Fusion
        ↓
@@ -65,19 +65,18 @@ All required AI models have been downloaded, verified, and staged locally in ded
 - Multi-mirror download with exponential backoff retry for PaddleOCR models.
 - Selective downloads supported via `--select` flag.
 
-PP-Structure model groups are stored under `models/pp_structure_v3/` as
-separate local packages for layout, OCR, table recognition, formulas, and
-charts. Runtime services must load only the group needed for the current stage
-and must not download weights.
+PP-Structure model groups are stored under `models/pp_structure_v3/` as local
+packages for layout, OCR, table recognition, formulas, charts, and table-cell
+submodels. The current PP-Structure stage loads layout, OCR, and table models
+together. Formula and chart services then share a later model stage, followed by
+the Qwen2.5-VL image/figure stage. Runtime services must never download weights.
 
 ### Staged Recognition Lifecycle
 
-1. Layout and OCR identify regions and produce text, captions, and crops.
-2. Table recognition processes only table regions.
-3. Formula recognition processes only formula regions.
-4. Chart recognition processes only chart regions.
-5. Qwen2.5-VL processes figures and images.
-6. Qwen3-4B fuses the structured results into summaries, claims, and relations.
+1. PP-Structure identifies regions, performs OCR, recognizes tables, and produces crops.
+2. Formula and chart services process only their matching regions in one shared stage.
+3. Qwen2.5-VL processes figures and images in a separate stage.
+4. Qwen3-8B is reserved for final structured fusion and summarization.
 
 Each stage updates stable element IDs in an intermediate recognition document;
 the Semantic Fusion Engine and Semantic Document Builder remain the final

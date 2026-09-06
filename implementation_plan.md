@@ -33,9 +33,10 @@ flowchart TD
     subgraph "Document Processing Pipeline"
         Pipeline -->|1. Render Pages| PDFParser[PDF Parser - PyMuPDF]
         PDFParser -->|Page Images & Metadata| StructureEngine{PP-StructureV3 / Analyzer}
-        StructureEngine -->|Layout Detection & OCR & Tables| ExtractionLayer[Extraction & Normalization Layer]
+        StructureEngine -->|Layout Detection + OCR + Tables| ExtractionLayer[Extraction & Normalization Layer]
         ExtractionLayer -->|Crop & Save Visuals| FigureStorage[(Extracted Figures/Tables Storage)]
-        ExtractionLayer -->|Raw Extracted Elements| Builder[Semantic Document Builder]
+        ExtractionLayer -->|Formula + Chart + Image Recognition| Recognition[Staged Recognition Services]
+        Recognition -->|Enriched Raw Elements| Builder[Semantic Document Builder]
         Builder -->|Schema Validation| PydanticSchema[Semantic Document Schema]
     end
 

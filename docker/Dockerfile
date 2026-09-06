@@ -10,9 +10,11 @@ ENV PYTHONUNBUFFERED=1 \
     PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
     PYTHONPATH=/app
 
-# Install system dependencies for PyMuPDF, OpenCV, and PaddlePaddle
+# Install system dependencies for PyMuPDF, OpenCV, PaddlePaddle, and llama-cpp-python C++ compilation
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    cmake \
+    ninja-build \
     curl \
     git \
     libgl1 \
@@ -29,7 +31,7 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 
 # Install Python packages with increased timeout and retries
-RUN pip install --no-cache-dir --upgrade pip && \
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir --default-timeout=1000 --retries 5 -r requirements.txt && \
     pip install --no-cache-dir --default-timeout=1000 --retries 5 paddlepaddle==3.0.0 paddleocr==3.7.0 "paddlex[ocr,multimodal]>=3.7.0,<3.8.0"
 

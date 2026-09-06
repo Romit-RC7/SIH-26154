@@ -38,9 +38,10 @@ Raw Multimodal Input (PDF / DOCX)
 #### Recognition Execution Model
 
 The recognition pipeline is staged to support offline execution on constrained
-hardware. Layout and OCR run first and produce stable region IDs and crops.
-Table, formula, and chart recognition then run only on their matching regions,
-followed by Qwen2.5-VL for visual regions and Qwen3-4B for structured fusion.
+hardware. PP-Structure currently runs layout detection, OCR, and table
+recognition together and produces stable region IDs and crops. Formula and
+chart recognition then run together on their matching regions, followed by
+Qwen2.5-VL for visual regions and Qwen3-8B for structured fusion.
 The resource manager limits resident model groups based on available RAM/VRAM,
 unloads each stage before the next one, and never downloads weights at runtime.
 
@@ -54,10 +55,19 @@ unloads each stage before the next one, and never downloads weights at runtime.
   - Inferences using Qwen2.5-VL-3B (quantized Q4 via Ollama / llama.cpp / vLLM).
   - Injects generated descriptions, data trends, diagram flows, and key takeaways into `element.content.raw_attributes["visual_analysis"]`.
 
-Chart parsing and formula recognition are separate specialist stages before
-visual fusion: PP-Chart2Table handles chart-to-table extraction, while
-PP-FormulaNet handles formula-to-LaTeX extraction. Their outputs retain the
-source element ID and are passed to the fusion model as structured evidence.
+Chart parsing and formula recognition share one specialist stage before visual
+fusion: PP-Chart2Table handles chart-to-table extraction, while PP-FormulaNet
+handles formula-to-LaTeX extraction. Their outputs retain the source element ID
+and are passed to the fusion model as structured evidence. Image and figure
+recognition is owned by a separate Qwen2.5-VL service.
+
+The current implementation locations are:
+
+- `backend/app/services/model_initializer/`: lazy PP-Structure, Qwen, and UniChart initializers.
+- `backend/app/services/recognition/coordinator.py`: staged and batch coordination.
+- `backend/app/services/recognition/chart_service.py`: PP-Chart2Table recognition.
+- `backend/app/services/recognition/image_service.py`: Qwen2.5-VL image/figure recognition.
+- `backend/app/processors/extractor.py`: parser, layout, crop, and recognition orchestration.
 
 ---
 

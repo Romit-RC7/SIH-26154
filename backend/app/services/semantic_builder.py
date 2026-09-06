@@ -40,6 +40,8 @@ class SemanticDocumentBuilder:
         page_count = meta.get("page_count", 1)
         title = meta.get("title") or file_path.stem
 
+        recognition_summary = self._recognition_summary(raw_elements)
+
         # 1. Fuse layout elements, reading order, captions, and source references
         elements, sources = semantic_fusion_engine.fuse_elements(
             raw_elements=raw_elements,
@@ -60,6 +62,7 @@ class SemanticDocumentBuilder:
                 "extracted_elements": len(elements),
                 "author": meta.get("author"),
                 "creator": meta.get("creator"),
+                "recognition": recognition_summary,
             }
         )
 
@@ -80,6 +83,17 @@ class SemanticDocumentBuilder:
             f"({len(semantic_doc.elements)} elements)"
         )
         return semantic_doc
+
+    @staticmethod
+    def _recognition_summary(raw_elements: List[RawDocumentElement]) -> Dict[str, int]:
+        """Count specialist outcomes without using an LLM or changing the contract."""
+        summary: Dict[str, int] = {}
+        for element in raw_elements:
+            for key, value in element.attributes.items():
+                if key.endswith("_recognition_status") or key.endswith("_analysis_status"):
+                    status = str(value)
+                    summary[status] = summary.get(status, 0) + 1
+        return summary
 
 
 semantic_document_builder = SemanticDocumentBuilder()

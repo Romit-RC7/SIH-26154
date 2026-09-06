@@ -1,4 +1,71 @@
 # SIH-26154 — Change History
+# Session 6 — 2026-09-05 — Staged Recognition and Initializer Architecture
+
+## Architecture decision
+
+The project now uses a batch-oriented offline recognition lifecycle. Documents
+are queued and processed in bounded batches so large models are not loaded for
+every document or page.
+
+Current stage order:
+
+```text
+PP-Structure: layout + OCR + table recognition
+    -> formula + chart recognition together
+    -> Qwen2.5-VL image/figure recognition
+    -> Qwen3 fusion (planned)
+```
+
+PP-Structure still owns table recognition because its pipeline requires table
+classification, SLANet structure recognition, and wired/wireless cell detection
+alongside layout and OCR. Formula and chart recognition are separate services
+that share one resident stage.
+
+## Model Initializers
+
+All lazy initializers now live under:
+
+```text
+backend/app/services/model_initializer/
+├── pp_structure_initializer.py
+├── qwen_initializers.py
+├── unichart_initializer.py
+└── __init__.py
+```
+
+They validate local weights, load on demand, and expose explicit unload methods.
+`PPStructureAnalyzer` delegates construction and unloading to
+`PPStructureInitializer`.
+
+## Recognition Services
+
+The recognition package contains `coordinator.py`, `resource_manager.py`,
+`chart_service.py`, and `image_service.py`.
+
+- The coordinator runs formula, chart, and image stages across a batch.
+- `chart_service.py` uses local PP-Chart2Table weights.
+- `image_service.py` uses Qwen2.5-VL and its local multimodal projector.
+- Formula and chart models stay resident together, then both unload before the
+  image stage.
+- Missing or incompatible optional models are recorded on affected elements.
+
+## Batch Pipeline
+
+1. Extract PDF/DOCX layout, OCR, tables, and crops for the whole batch.
+2. Process formulas and charts across all documents in one shared stage.
+3. Process images and figures with Qwen2.5-VL.
+4. Build and persist each document independently.
+
+Stable document and element IDs preserve provenance across the flattened batch.
+
+## Pending Work
+
+- Qwen3-8B/4B structured fusion is not wired into the pipeline yet.
+- UniChart has an initializer but is not yet called by chart recognition.
+- Text/table recognition remain owned by PP-Structure rather than separate services.
+- Docker runtime validation and hardware-specific RAM/VRAM admission remain pending.
+
+---
 
 > **Purpose**: Quick-reference changelog for LLM continuity.  
 > Read this file FIRST to understand what has already been done, what decisions were made, and what is pending.  

@@ -32,10 +32,16 @@ router = APIRouter()
 
 @router.post(
     "/upload",
+    tags=["Documents"],
     response_model=DocumentUploadResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Upload PDF or DOCX Document",
-    description="Uploads a PDF or DOCX file, creates database records, and triggers the background Semantic Document Processing pipeline."
+    description=(
+        "Uploads a PDF or DOCX file and places it in the bounded recognition queue. "
+        "Documents are processed in batches: PP-Structure handles layout, OCR, and "
+        "tables; formula and chart models share a later stage; image/figure recognition "
+        "is optional. Poll the returned document ID for completion."
+    ),
 )
 async def upload_document(
     background_tasks: BackgroundTasks,
@@ -96,7 +102,7 @@ async def upload_document(
         await db.refresh(doc)
 
         # 5. Enqueue background pipeline processing
-        background_tasks.add_task(pipeline_service.process_document, document_id, job_id)
+        background_tasks.add_task(pipeline_service.enqueue_job, document_id, job_id)
 
         logger.info(f"Enqueued document {document_id} for processing (job: {job_id})")
 
@@ -121,9 +127,10 @@ async def upload_document(
 
 @router.get(
     "/{document_id}",
+    tags=["Documents"],
     response_model=DocumentDetail,
     summary="Get Document Status and Details",
-    description="Retrieves document metadata, upload details, processing status, and extracted element counts."
+    description="Retrieves document metadata, queue status, processing telemetry, and extracted element counts."
 )
 async def get_document(
     document_id: str,
@@ -161,9 +168,14 @@ async def get_document(
 
 @router.get(
     "/{document_id}/semantic",
+    tags=["Documents"],
     response_model=SemanticDocument,
     summary="Get Unified Semantic Document JSON (System Contract)",
-    description="Returns the complete Semantic Document JSON representation consumed by all future AI modules."
+    description=(
+        "Returns the validated Semantic Document JSON contract. Recognition outputs "
+        "are preserved in element content raw_attributes, including specialist model "
+        "status, errors, and chart/image/formula results. Returns 202 while queued or processing."
+    ),
 )
 async def get_document_semantic_json(
     document_id: str,
@@ -211,9 +223,10 @@ async def get_document_semantic_json(
 
 @router.get(
     "",
+    tags=["Documents"],
     response_model=DocumentListResponse,
     summary="List Documents",
-    description="Retrieves a paginated list of uploaded documents, optionally filtered by status."
+    description="Retrieves queued, processing, completed, or failed documents with pagination and status filtering."
 )
 async def list_documents(
     skip: int = Query(0, ge=0, description="Offset"),

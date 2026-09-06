@@ -4,14 +4,13 @@ Integrates PaddleOCR / PP-StructureV3 for layout analysis, table recognition, an
 Provides seamless fallback to FallbackStructureAnalyzer if PaddleOCR runtime is not present or fails.
 """
 
-import os
 import re
 import numpy as np
 from typing import Any, Dict, List, Optional
 from PIL import Image
 from backend.app.processors.base import BaseStructureAnalyzer, RawDocumentElement
-from backend.app.core.config import settings
 from backend.app.core.logging import logger
+from backend.app.services.model_initializer import pp_structure_initializer
 
 
 class PPStructureAnalyzer(BaseStructureAnalyzer):
@@ -21,124 +20,15 @@ class PPStructureAnalyzer(BaseStructureAnalyzer):
     compatibility for legacy mock test fixtures.
     """
 
-    def __init__(self):
+    def __init__(self, initializer=pp_structure_initializer):
+        self.initializer = initializer
         self.engine = None
         self._initialized = False
-        self._initialize_engine()
 
     def _initialize_engine(self):
-        """Lazy load or initialize PPStructureV3."""
-        if settings.DOC_ANALYZER_ENGINE != "pp_structure":
-            logger.info("PP-Structure analyzer disabled by configuration (DOC_ANALYZER_ENGINE != pp_structure)")
-            return
-
+        """Load PP-StructureV3 on first page analysis."""
         try:
-            # Pre-import requests/chardet to prevent zlib C symbol collisions
-            import requests  # noqa: F401
-            import chardet   # noqa: F401
-
-            # Keep PaddleX from checking remote model sources during startup.
-            os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
-
-            # Resolve local model paths from models/pp_structure_v3
-            models_root = settings.PP_STRUCTURE_MODEL_DIR
-            layout_dir = models_root / "layout"
-            table_dir = models_root / "table"
-            det_dir = models_root / "det"
-            rec_dir = models_root / "rec"
-            table_cls_dir = models_root / "table_cls"
-            wired_cells_dir = models_root / "wired_table_cells"
-            wireless_cells_dir = models_root / "wireless_table_cells"
-            chart_dir = models_root / "chart"
-
-            required_model_dirs = {
-                "layout": layout_dir,
-                "table": table_dir,
-                "det": det_dir,
-                "rec": rec_dir,
-                "table_cls": table_cls_dir,
-                "wired_table_cells": wired_cells_dir,
-                "wireless_table_cells": wireless_cells_dir,
-            }
-            missing_model_dirs = [
-                name for name, model_dir in required_model_dirs.items()
-                if not (model_dir.exists() and (model_dir / "inference.yml").exists())
-            ]
-            if missing_model_dirs:
-                raise RuntimeError(
-                    "Strict offline PP-Structure requires local model packages for: "
-                    + ", ".join(missing_model_dirs)
-                )
-
-            from paddleocr import PPStructureV3
-
-            kwargs = {
-                "use_table_recognition": True,
-                "use_chart_recognition": False,
-                "use_doc_orientation_classify": False,
-                "use_doc_unwarping": False,
-                "use_textline_orientation": False,
-                "use_formula_recognition": False,
-                "use_seal_recognition": False,
-                "use_region_detection": False,
-                "lang": "en",
-            }
-
-            # Inject local downloaded model directories when present
-            if layout_dir.exists() and any(layout_dir.iterdir()):
-                kwargs["layout_detection_model_name"] = "PP-DocLayout-L"
-                kwargs["layout_detection_model_dir"] = str(layout_dir)
-                logger.info("PP-Structure: Using local layout model from %s", layout_dir)
-            if table_dir.exists() and any(table_dir.iterdir()):
-                kwargs["wired_table_structure_recognition_model_name"] = "SLANet_plus"
-                kwargs["wired_table_structure_recognition_model_dir"] = str(table_dir)
-                kwargs["wireless_table_structure_recognition_model_name"] = "SLANet_plus"
-                kwargs["wireless_table_structure_recognition_model_dir"] = str(table_dir)
-                logger.info("PP-Structure: Using local table model from %s", table_dir)
-            kwargs["table_classification_model_name"] = "PP-LCNet_x1_0_table_cls"
-            kwargs["table_classification_model_dir"] = str(table_cls_dir)
-            kwargs["wired_table_cells_detection_model_name"] = "RT-DETR-L_wired_table_cell_det"
-            kwargs["wired_table_cells_detection_model_dir"] = str(wired_cells_dir)
-            kwargs["wireless_table_cells_detection_model_name"] = "RT-DETR-L_wireless_table_cell_det"
-            kwargs["wireless_table_cells_detection_model_dir"] = str(wireless_cells_dir)
-            if det_dir.exists() and any(det_dir.iterdir()):
-                kwargs["text_detection_model_name"] = "PP-OCRv4_server_det"
-                kwargs["text_detection_model_dir"] = str(det_dir)
-                logger.info("PP-Structure: Using local detection model from %s", det_dir)
-            if rec_dir.exists() and any(rec_dir.iterdir()):
-                kwargs["text_recognition_model_name"] = "PP-OCRv4_server_rec"
-                kwargs["text_recognition_model_dir"] = str(rec_dir)
-                logger.info("PP-Structure: Using local recognition model from %s", rec_dir)
-
-            chart_model_ready = (
-                (
-                    (chart_dir / "inference.pdiparams").exists()
-                    or (chart_dir / "model_state.pdparams").exists()
-                )
-                and (chart_dir / "inference.yml").exists()
-            )
-            chart_runtime_ready = False
-            if chart_model_ready:
-                try:
-                    from paddle.incubate.nn.functional import fused_rms_norm_ext  # noqa: F401
-                    chart_runtime_ready = True
-                except ImportError:
-                    logger.warning(
-                        "PP-Structure chart recognition disabled: installed PaddlePaddle "
-                        "does not provide fused_rms_norm_ext required by PP-Chart2Table."
-                    )
-            if chart_model_ready and chart_runtime_ready:
-                kwargs["use_chart_recognition"] = True
-                kwargs["chart_recognition_model_name"] = "PP-Chart2Table"
-                kwargs["chart_recognition_model_dir"] = str(chart_dir)
-                logger.info("PP-Structure: Using local chart model from %s", chart_dir)
-            else:
-                logger.warning(
-                    "PP-Structure chart recognition disabled: no local chart model found at %s",
-                    chart_dir,
-                )
-
-            self.engine = PPStructureV3(**kwargs)
+            self.engine = self.initializer.load()
             self._initialized = True
             logger.info("PaddleOCR PP-Structure initialized successfully with offline model weights.")
         except Exception as e:
@@ -149,7 +39,12 @@ class PPStructureAnalyzer(BaseStructureAnalyzer):
             self._initialized = False
 
     def is_available(self) -> bool:
-        return self._initialized and self.engine is not None
+        return self._initialized or self.initializer.is_available()
+
+    def unload(self) -> None:
+        self.initializer.unload()
+        self.engine = None
+        self._initialized = False
 
     def analyze_page(
         self,
@@ -160,7 +55,9 @@ class PPStructureAnalyzer(BaseStructureAnalyzer):
         """
         Analyze a rasterized page image using PP-StructureV3.
         """
-        if not self.is_available():
+        if not self._initialized:
+            self._initialize_engine()
+        if not self._initialized:
             raise RuntimeError("PP-Structure engine is not available.")
 
         logger.info("Processing page using PPStructureV3")
@@ -243,6 +140,9 @@ class PPStructureAnalyzer(BaseStructureAnalyzer):
                 elif raw_label in ["figure_title"]:
                     elem_type = "text"
                     role = "caption"
+                elif raw_label in ["formula", "equation"]:
+                    elem_type = "text"
+                    role = "formula"
                 elif raw_label == "table":
                     elem_type = "table"
                     role = "table"
@@ -297,6 +197,15 @@ class PPStructureAnalyzer(BaseStructureAnalyzer):
                     elif raw_bbox:
                         crop_img = self._crop_region(page_image, raw_bbox)
 
+                attributes = {
+                    "pp_type": raw_label,
+                    "role": role,
+                    "layout_index": idx,
+                    "reading_order": order_index,
+                }
+                if raw_label in ["formula", "equation"]:
+                    attributes["recognition_type"] = "formula"
+
                 bbox_coords = [float(b) for b in raw_bbox] if raw_bbox else None
 
                 extracted.append(
@@ -309,12 +218,7 @@ class PPStructureAnalyzer(BaseStructureAnalyzer):
                         html=html_val,
                         confidence=round(confidence, 3),
                         image=crop_img,
-                        attributes={
-                            "pp_type": raw_label,
-                            "role": role,
-                            "layout_index": idx,
-                            "reading_order": order_index,
-                        }
+                        attributes=attributes
                     )
                 )
 

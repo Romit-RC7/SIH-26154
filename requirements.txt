@@ -17,11 +17,17 @@ python-docx>=1.1.0
 pillow>=10.2.0
 numpy>=1.26.0
 
+# VLM, Multimodal & Specialist AI Models (Qwen2.5-VL GGUF, UniChart & BGE Embeddings)
+llama-cpp-python>=0.2.77
+transformers>=4.40.0
+torch>=2.2.0
+huggingface-hub>=0.21.0
+
 # PP-StructureV3 (PaddleOCR)
 # In Docker or production Linux GPU/CPU:
 # paddlepaddle==3.0.0
 # paddleocr==3.7.0
-# paddlex[ocr]>=3.7.0,<3.8.0
+# paddlex[ocr,multimodal]>=3.7.0,<3.8.0
 
 # Testing & Client
 pytest>=8.0.0

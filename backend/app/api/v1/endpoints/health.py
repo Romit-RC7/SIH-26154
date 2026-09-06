@@ -12,7 +12,15 @@ from backend.app.processors.pp_structure import pp_structure_analyzer
 router = APIRouter()
 
 
-@router.get("", summary="System Health & Diagnostic Status")
+@router.get(
+    "",
+    tags=["System"],
+    summary="System Health and Runtime Diagnostics",
+    description=(
+        "Reports database connectivity, configured analyzer, and whether the "
+        "offline PP-Structure initializer is available."
+    ),
+)
 async def health_check(db: AsyncSession = Depends(get_db)):
     # Verify DB connectivity
     db_status = "healthy"

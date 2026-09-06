@@ -17,11 +17,13 @@ PDF / DOCX Upload
   ↓
 Document Parser (PyMuPDF / docx)
   ↓
-Offline Layout + OCR Stage
+Offline PP-Structure Stage (Layout + OCR + Tables)
   ↓
 Region Crops and Intermediate Recognition Document
   ↓
-Table → Formula → Chart → Visual Recognition (staged)
+Formula + Chart Recognition (shared staged model residency)
+  ↓
+Image/Figure Recognition (Qwen2.5-VL)
   ↓
 Qwen3-4B Fusion Stage
   ↓
@@ -34,9 +36,9 @@ Unified Semantic Document JSON (Pydantic Schema)
 PostgreSQL Storage (JSONB document + relational elements)
 ```
 
-    Recognition stages are resource-aware. Layout and OCR may share a loaded stage;
-    table, formula, chart, Qwen2.5-VL, and Qwen3 models are loaded sequentially,
-    with at most one or two model groups resident according to available RAM/VRAM.
+    Recognition stages are resource-aware. PP-Structure currently loads layout,
+    OCR, and table submodels together. Formula and chart models are then loaded
+    together for one batch stage, followed by Qwen2.5-VL for images and figures.
     All model paths are local and missing optional weights must disable only that
     stage, never trigger a runtime download.
 
