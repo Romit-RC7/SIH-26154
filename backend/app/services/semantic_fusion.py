@@ -46,17 +46,25 @@ class SemanticFusionEngine:
             saved_image = item.attributes.get("saved_image_path")
             has_text = bool(item.text and item.text.strip())
             has_formatted = bool(item.markdown or item.html)
-            has_image = bool(saved_image)
+            has_image = bool(saved_image or item.image is not None)
+            has_caption = bool(item.caption and item.caption.strip())
+            is_audio_element = (
+                item.attributes.get("recognition_type") == "audio"
+                or "audio_transcription_status" in item.attributes
+            )
 
-            # Skip empty background layout artifacts that contain zero content
-            if not (has_text or has_formatted or has_image):
+            # Skip empty background layout artifacts that contain zero content,
+            # but preserve elements with text, markdown/html, images, captions, or audio status
+            if not (has_text or has_formatted or has_image or has_caption or is_audio_element):
                 continue
 
             elem_id = item.attributes.get("element_id") or f"elem_{document_id[:8]}_{item.page}_{idx + 1}"
 
             # Validate type to contract
             elem_type = item.type
-            if elem_type not in ["text", "table", "image", "chart", "figure"]:
+            if is_audio_element:
+                elem_type = "audio"
+            elif elem_type not in ["text", "table", "image", "chart", "figure", "audio"]:
                 elem_type = "text"
 
             raw_attributes = {

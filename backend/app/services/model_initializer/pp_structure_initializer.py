@@ -28,10 +28,16 @@ class PPStructureInitializer:
             "wired_table_cells": self.models_root / "wired_table_cells",
             "wireless_table_cells": self.models_root / "wireless_table_cells",
             "chart": self.models_root / "chart",
+            "doc_ori": self.models_root / "doc_ori",
+            "textline_ori": self.models_root / "textline_ori",
         }
 
     def is_available(self) -> bool:
         if settings.DOC_ANALYZER_ENGINE != "pp_structure":
+            return False
+        try:
+            import paddleocr  # noqa: F401
+        except Exception:
             return False
         required = ("layout", "table", "det", "rec", "table_cls", "wired_table_cells", "wireless_table_cells")
         return all(
@@ -47,6 +53,7 @@ class PPStructureInitializer:
             raise RuntimeError("Required local PP-Structure model packages are unavailable")
 
         os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
+        os.environ.setdefault("PADDLEX_NO_DOWNLOAD", "True")
         from paddleocr import PPStructureV3
 
         device = "cpu"
@@ -107,6 +114,19 @@ class PPStructureInitializer:
                 )
         else:
             logger.warning("PP-Structure chart model is not complete: %s", chart_dir)
+
+        if (dirs["doc_ori"] / "inference.yml").exists():
+            kwargs.update(
+                doc_orientation_model_name="PP-LCNet_x1_0_doc_ori",
+                doc_orientation_model_dir=str(dirs["doc_ori"]),
+                doc_orientation_classify_model_name="PP-LCNet_x1_0_doc_ori",
+                doc_orientation_classify_model_dir=str(dirs["doc_ori"]),
+            )
+        if (dirs["textline_ori"] / "inference.yml").exists():
+            kwargs.update(
+                textline_orientation_model_name="PP-LCNet_x1_0_textline_ori",
+                textline_orientation_model_dir=str(dirs["textline_ori"]),
+            )
 
         logger.info("Loading offline PP-StructureV3 models from %s", self.models_root)
         self.engine = PPStructureV3(**kwargs)

@@ -287,3 +287,9 @@ python -m pytest backend/tests/ -v
 - Upload a test PDF file to `POST /api/v1/documents/upload`.
 - Query `GET /api/v1/documents/{id}/semantic` to verify the generated JSON structure matches the SIH specification.
 - Verify files in `uploads/raw` and `uploads/extracted`.
+
+---
+
+## Implementation Update — September 6, 2026
+
+The implemented pipeline now supports PPTX, standalone images, and video input in addition to the originally planned PDF/DOCX path. Video input is restricted to MP4, WebM, and MOV files no larger than 100 MB and no longer than two minutes. The video parser extracts 16 kHz mono audio for the lazy Faster-Whisper-small stage and samples one frame every 10 seconds for Qwen2.5-VL. Docker includes FFmpeg and Faster-Whisper; the Dockerfile uses BuildKit pip caching to speed dependency rebuilds.

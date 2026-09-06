@@ -278,3 +278,23 @@ GET /api/v1/health
 pytest backend/tests -v
 ```
 All unit tests and API integration tests run against an in-memory SQLite database, requiring zero external infrastructure.
+
+---
+
+## Current Video & Offline Recognition Support
+
+The pipeline accepts PDF, DOCX, PPTX, images, and short videos. Video uploads accept **MP4** (preferred), **WebM**, and **MOV**, with a **100 MB** and **two-minute** limit. FFmpeg extracts a 16 kHz mono WAV track and samples one frame every 10 seconds (six per minute, maximum width 1280px). PP-Structure OCR supplies text evidence for every sampled video frame before Qwen2.5-VL performs video/HMI-aware visual analysis. Faster-Whisper-small transcribes audio only when it exists; Qwen2.5-VL receives only persisted visual crops.
+
+All model stages are local and unload after their applicable batch stage. Download the speech model once with:
+
+```bash
+python scripts/download_models.py --select faster_whisper
+```
+
+Docker installs FFmpeg and Faster-Whisper. Use BuildKit when rebuilding:
+
+```powershell
+cd docker
+$env:DOCKER_BUILDKIT=1
+docker compose up --build
+```

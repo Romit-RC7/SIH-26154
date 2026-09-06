@@ -9,15 +9,16 @@ from typing import List, Tuple
 from PIL import Image
 import fitz  # PyMuPDF
 from backend.app.processors.base import ParsedPage, RawDocumentElement
+from backend.app.core.config import settings
 from backend.app.core.logging import logger
 
 
 class PDFParser:
     """Renders PDF pages to images and extracts raw blocks and metadata."""
 
-    def __init__(self, dpi: int = 150):
-        self.dpi = dpi
-        self.zoom = dpi / 72.0  # Default PDF resolution is 72 dpi
+    def __init__(self, dpi: int | None = None):
+        self.dpi = dpi if dpi is not None else settings.PDF_RENDER_DPI
+        self.zoom = self.dpi / 72.0  # Default PDF resolution is 72 dpi
 
     def parse(self, file_path: Path) -> Tuple[List[ParsedPage], List[RawDocumentElement], dict]:
         """

@@ -46,11 +46,18 @@ class ChartRecognitionService:
                 self._mark_error(element, str(exc))
 
     def _is_ready(self) -> bool:
-        return (
+        if not (
             self.model_dir.is_dir()
             and (self.model_dir / "model_state.pdparams").exists()
             and (self.model_dir / "inference.yml").exists()
-        )
+        ):
+            return False
+        try:
+            from paddle.incubate.nn.functional import fused_rms_norm_ext  # noqa: F401
+            return True
+        except ImportError:
+            logger.warning("PP-Chart2Table unavailable: Paddle runtime lacks fused_rms_norm_ext")
+            return False
 
     def _load_model(self) -> Any:
         from paddlex import create_model

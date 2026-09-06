@@ -21,6 +21,7 @@ class ElementType(str, enum.Enum):
     IMAGE = "image"
     CHART = "chart"
     FIGURE = "figure"
+    AUDIO = "audio"
 
 
 class DocumentElement(Base, TimestampMixin):

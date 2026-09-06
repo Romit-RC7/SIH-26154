@@ -42,6 +42,14 @@ def test_recognizes_formula_and_chart_sequentially(tmp_path, monkeypatch):
         "backend.app.services.recognition.coordinator.RecognitionCoordinator._create_model",
         staticmethod(fake_create_model),
     )
+    monkeypatch.setattr(
+        "backend.app.services.recognition.chart_service.chart_recognition_service._is_ready",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "backend.app.services.recognition.chart_service.chart_recognition_service._load_model",
+        lambda: fake_create_model("PP-Chart2Table", tmp_path / "chart"),
+    )
 
     elements = [
         RawDocumentElement("text", 1, image=Image.new("RGB", (4, 4)), attributes={"recognition_type": "formula"}),

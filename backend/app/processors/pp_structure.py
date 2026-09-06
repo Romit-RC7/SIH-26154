@@ -39,6 +39,8 @@ class PPStructureAnalyzer(BaseStructureAnalyzer):
             self._initialized = False
 
     def is_available(self) -> bool:
+        if getattr(self, "_disabled", False):
+            return False
         return self._initialized or self.initializer.is_available()
 
     def unload(self) -> None:
@@ -55,6 +57,8 @@ class PPStructureAnalyzer(BaseStructureAnalyzer):
         """
         Analyze a rasterized page image using PP-StructureV3.
         """
+        if not self.is_available():
+            raise RuntimeError("PP-Structure engine is not available.")
         if not self._initialized:
             self._initialize_engine()
         if not self._initialized:

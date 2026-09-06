@@ -1,4 +1,26 @@
 # SIH-26154 — Change History
+# Session 7 — 2026-09-06 — Offline Video, Faster-Whisper, and Build Caching
+
+## What was done
+
+- Added video upload support for `.mp4`, `.webm`, and `.mov` with a 100 MB / two-minute policy exposed in Swagger.
+- Added `video_parser.py`, which uses local FFmpeg/FFprobe to extract 16 kHz mono WAV audio and sample one 1280px-capped frame every 10 seconds (six per minute).
+- Added a lazy `FasterWhisperInitializer` and `speech_service.py`. The model loads only when a batch contains extracted video audio and unloads before the Qwen vision stage.
+- Added `Systran/faster-whisper-small` to the offline model downloader as `--select faster_whisper` and to system diagnostics.
+- Added Docker FFmpeg and Faster-Whisper dependencies.
+- Enabled BuildKit’s Dockerfile frontend and persistent pip cache mount for faster dependency-layer rebuilds.
+- Corrected the downloader completion check so empty folders no longer appear to contain model weights.
+
+## Runtime sequence
+
+```text
+PP-Structure -> formula + chart -> Faster-Whisper (audio only) -> Qwen2.5-VL (visual crops only) -> semantic fusion
+```
+
+All stages run from local files after the one-time Docker build and model download. No model weights are downloaded at inference time.
+
+---
+
 # Session 6 — 2026-09-05 — Staged Recognition and Initializer Architecture
 
 ## Architecture decision

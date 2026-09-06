@@ -128,3 +128,9 @@ The current implementation locations are:
   4. **Presentation Deck**: Slide outline with titles, bullet points, speaker notes, and diagram references (PPTX / HTML).
   5. **Infographic Package**: Visual design blueprint and key data callouts.
   6. **Video Script Package**: Scene-by-scene storyboard, narration, subtitles, and visual suggestions.
+
+---
+
+## Current Video Ingestion Extension
+
+Phase 1 now includes offline video ingestion. MP4, WebM, and MOV uploads are limited to 100 MB and two minutes. FFmpeg extracts a 16 kHz mono audio artifact for Faster-Whisper-small and samples video frames every 10 seconds for Qwen2.5-VL. The speech stage runs only for audio-bearing videos and unloads before the visual stage, preserving resource-aware staged model residency.

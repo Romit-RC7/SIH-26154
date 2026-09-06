@@ -17,6 +17,7 @@ from backend.app.core.config import settings
 from backend.app.core.logging import logger
 from backend.app.processors.ppt_parser import ppt_parser
 from backend.app.processors.image_parser import image_parser
+from backend.app.processors.video_parser import video_parser
 import fitz
 
 
@@ -53,6 +54,9 @@ class DocumentExtractor:
             ".tiff"
         }:
             return self._extract_image(file_path, document_id, run_specialist_recognition, unload_structure)
+
+        elif extension in {".mp4", ".mov", ".webm"}:
+            return self._extract_video(file_path, document_id, run_specialist_recognition, unload_structure)
 
         else:
             raise ValueError(
@@ -123,10 +127,10 @@ class DocumentExtractor:
 
             processed_elements.append(elem)
 
-        if run_specialist_recognition:
-            recognition_coordinator.recognize(processed_elements)
         if unload_structure:
             pp_structure_analyzer.unload()
+        if run_specialist_recognition:
+            recognition_coordinator.recognize(processed_elements)
         meta["extracted_elements_count"] = len(processed_elements)
         return processed_elements, meta
 
@@ -159,10 +163,10 @@ class DocumentExtractor:
 
             processed.append(elem)
 
-        if run_specialist_recognition:
-            recognition_coordinator.recognize(processed)
         if unload_structure:
             pp_structure_analyzer.unload()
+        if run_specialist_recognition:
+            recognition_coordinator.recognize(processed)
 
         meta["extracted_elements_count"] = len(processed)
         return processed, meta
@@ -204,10 +208,10 @@ class DocumentExtractor:
                     )
 
             processed.append(elem)
-        if run_specialist_recognition:
-            recognition_coordinator.recognize(processed)
         if unload_structure:
             pp_structure_analyzer.unload()
+        if run_specialist_recognition:
+            recognition_coordinator.recognize(processed)
         meta["extracted_elements_count"] = len(processed)
 
         return processed, meta
@@ -248,13 +252,62 @@ class DocumentExtractor:
                     )
 
             processed.append(elem)
-        if run_specialist_recognition:
-            recognition_coordinator.recognize(processed)
         if unload_structure:
             pp_structure_analyzer.unload()
+        if run_specialist_recognition:
+            recognition_coordinator.recognize(processed)
         meta["extracted_elements_count"] = len(processed)
 
         return processed, meta
+
+    def _extract_video(
+        self,
+        file_path: Path,
+        document_id: str,
+        run_specialist_recognition: bool = True,
+        unload_structure: bool = True,
+    ):
+        """Extract a mono WAV track and visual frame samples from an uploaded video."""
+        audio_output_path = storage_service.extracted_dir / document_id / "audio.wav"
+        _, raw_elements, meta = video_parser.parse(file_path, audio_output_path)
+        processed: List[RawDocumentElement] = []
+        for idx, elem in enumerate(raw_elements):
+            element_id = f"elem_{document_id[:8]}_{elem.page}_{idx + 1}"
+            elem.attributes["element_id"] = element_id
+            if elem.image is not None:
+                self._attach_video_frame_ocr(elem)
+                try:
+                    elem.attributes["saved_image_path"] = storage_service.save_image_crop(elem.image, document_id, element_id, "png")
+                except Exception as exc:
+                    logger.warning("Could not persist video frame %s: %s", element_id, exc)
+            processed.append(elem)
+        if unload_structure:
+            pp_structure_analyzer.unload()
+        if run_specialist_recognition:
+            recognition_coordinator.recognize(processed)
+        meta["extracted_elements_count"] = len(processed)
+        return processed, meta
+
+    @staticmethod
+    def _attach_video_frame_ocr(element: RawDocumentElement) -> None:
+        """Attach PP-Structure OCR evidence to one sampled video frame."""
+        if element.image is None or not pp_structure_analyzer.is_available():
+            return
+        try:
+            ocr_elements = pp_structure_analyzer.analyze_page(element.image, element.page)
+            text = "\n".join(
+                item.text.strip()
+                for item in ocr_elements
+                if item.type == "text" and item.text and item.text.strip()
+            )
+            if text:
+                element.attributes["ocr_text"] = text
+                element.attributes["ocr_model"] = "PP-StructureV3"
+                element.attributes["ocr_status"] = "completed"
+        except Exception as exc:
+            logger.warning("Video-frame OCR failed on page %s: %s", element.page, exc)
+            element.attributes["ocr_status"] = "failed"
+            element.attributes["ocr_error"] = str(exc)
 
 
 document_extractor = DocumentExtractor()

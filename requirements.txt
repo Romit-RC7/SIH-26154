@@ -23,6 +23,7 @@ llama-cpp-python>=0.2.77
 transformers>=4.40.0
 torch>=2.2.0
 huggingface-hub>=0.21.0
+faster-whisper>=1.1.0
 
 # PP-StructureV3 (PaddleOCR)
 # In Docker or production Linux GPU/CPU:

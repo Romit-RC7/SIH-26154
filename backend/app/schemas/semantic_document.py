@@ -16,6 +16,7 @@ class ElementType(str, Enum):
     IMAGE = "image"
     CHART = "chart"
     FIGURE = "figure"
+    AUDIO = "audio"
 
 
 class DocumentMetadata(BaseModel):
@@ -48,7 +49,7 @@ class ElementContent(BaseModel):
 class SemanticElement(BaseModel):
     """Individual atomic document element."""
     id: str = Field(..., description="Deterministic or unique element identifier")
-    type: Literal["text", "table", "image", "chart", "figure"] = Field(
+    type: Literal["text", "table", "image", "chart", "figure", "audio"] = Field(
         ...,
         description="Categorized element type"
     )

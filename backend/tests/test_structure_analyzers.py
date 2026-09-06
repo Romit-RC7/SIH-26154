@@ -128,6 +128,7 @@ def test_fallback_analyzer_when_pp_structure_unavailable():
     """
     analyzer = PPStructureAnalyzer()
     analyzer._initialized = False
+    analyzer._disabled = True
     analyzer.engine = None
 
     assert analyzer.is_available() is False
@@ -257,7 +258,7 @@ def test_pp_structure_v3_native_parsing():
 
 def test_pp_structure_initialization_failure_fallback():
     """Verify analyzer handles initialization errors cleanly without crashing."""
-    with patch("paddleocr.PPStructureV3", side_effect=ImportError("Mocked missing module")):
+    with patch("backend.app.processors.pp_structure.pp_structure_initializer.is_available", return_value=False):
         analyzer = PPStructureAnalyzer()
         assert analyzer.is_available() is False
         assert analyzer.engine is None

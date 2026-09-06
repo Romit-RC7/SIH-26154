@@ -10,7 +10,13 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
+      - TZ=Asia/Kolkata
       - ENVIRONMENT=development
       - DEBUG=true
       - POSTGRES_SERVER=db
@@ -39,10 +45,16 @@ services:
     restart: unless-stopped
     ports:
       - "5432:5432"
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_password
-      POSTGRES_DB: sih_content_platform
+      - TZ=Asia/Kolkata
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres_password
+      - POSTGRES_DB=sih_content_platform
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

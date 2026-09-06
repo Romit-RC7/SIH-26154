@@ -2,6 +2,11 @@
 FastAPI Application Entrypoint for SIH-26154 Semantic Document Processing System.
 """
 
+import os
+
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("OMP_NUM_THREADS", "2")
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

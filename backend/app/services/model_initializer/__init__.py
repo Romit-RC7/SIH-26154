@@ -15,6 +15,10 @@ from backend.app.services.model_initializer.unichart_initializer import (
     UniChartInitializer,
     unichart_initializer,
 )
+from backend.app.services.model_initializer.faster_whisper_initializer import (
+    FasterWhisperInitializer,
+    faster_whisper_initializer,
+)
 
 __all__ = [
     "QwenFusionInitializer",
@@ -26,4 +30,6 @@ __all__ = [
     "pp_structure_initializer",
     "UniChartInitializer",
     "unichart_initializer",
+    "FasterWhisperInitializer",
+    "faster_whisper_initializer",
 ]

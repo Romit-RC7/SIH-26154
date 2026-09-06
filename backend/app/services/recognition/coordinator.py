@@ -14,6 +14,7 @@ from backend.app.processors.base import RawDocumentElement
 from backend.app.services.recognition.resource_manager import ModelResourceManager
 from backend.app.services.recognition.chart_service import chart_recognition_service
 from backend.app.services.recognition.image_service import image_recognition_service
+from backend.app.services.recognition.speech_service import speech_recognition_service
 
 
 class RecognitionCoordinator:
@@ -24,6 +25,7 @@ class RecognitionCoordinator:
 
     def recognize(self, elements: List[RawDocumentElement]) -> List[RawDocumentElement]:
         self._run_formula_chart_stage(elements)
+        speech_recognition_service.recognize(elements)
         image_recognition_service.recognize(elements)
         return elements
 
@@ -34,6 +36,7 @@ class RecognitionCoordinator:
         """Run each specialist once across all regions from a document batch."""
         elements = [element for document in documents for element in document]
         self._run_formula_chart_stage(elements)
+        speech_recognition_service.recognize(elements)
         image_recognition_service.recognize(elements)
         return documents
 

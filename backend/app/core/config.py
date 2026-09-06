@@ -69,16 +69,26 @@ class Settings(BaseSettings):
     # Model Storage Paths
     MODELS_DIR: Path = BASE_DIR / "models"
     PP_STRUCTURE_MODEL_DIR: Path = MODELS_DIR / "pp_structure_v3"
+    FASTER_WHISPER_MODEL_DIR: Path = MODELS_DIR / "faster_whisper_small"
 
     # Processing & OCR Configuration
     # Options: 'pp_structure' (production PaddleOCR) or 'rule_based' (fast PyMuPDF/fallback)
     DOC_ANALYZER_ENGINE: str = "pp_structure"
     ENABLE_OCR: bool = True
+    # PDF pages are rasterized once for PP-Structure and any visual crops passed
+    # to Qwen. 120 DPI keeps those shared images within the intended 100-120
+    # DPI range while retaining enough detail for ordinary digital documents.
+    PDF_RENDER_DPI: int = 120
+    VIDEO_FRAME_SAMPLE_RATE_PER_MINUTE: int = 6
+    VIDEO_FRAME_MAX_WIDTH: int = 1280
+    VIDEO_MAX_DURATION_SECONDS: int = 120
+    FASTER_WHISPER_DEVICE: str = "cuda"
+    FASTER_WHISPER_COMPUTE_TYPE: str = "float16"
     USE_GPU: bool = True
     N_GPU_LAYERS: int = -1  # -1 offloads all layers to GPU in llama-cpp-python
     RECOGNITION_BATCH_SIZE: int = 4
     RECOGNITION_BATCH_WAIT_SECONDS: float = 0.5
-    MAX_UPLOAD_SIZE_MB: int = 50
+    MAX_UPLOAD_SIZE_MB: int = 100
 
     ALLOWED_EXTENSIONS: ClassVar[Set[str]] = {
         ".pdf",
@@ -90,6 +100,9 @@ class Settings(BaseSettings):
         ".bmp",
         ".tiff",
         ".webp",
+        ".mp4",
+        ".mov",
+        ".webm",
     }
 
     # LLM & Vision Model Configuration

@@ -317,3 +317,13 @@ With Phase 1 document intelligence, offline model staging, and PP-Structure inte
    - Populate pgvector tables for sub-second semantic retrieval.
 3. **Intent & Content Orchestration**:
    - Synthesize multi-format outputs (Executive Summary, LinkedIn, PPT Slides, Infographics) using `Qwen3-4B` and `Qwen3-8B`.
+
+---
+
+## 8. Current Video Processing Extension
+
+The current implementation accepts MP4 (preferred), WebM, and MOV videos up to 100 MB and two minutes. `video_parser.py` uses local FFmpeg/FFprobe to extract a 16 kHz mono WAV artifact and sample one visual frame every 10 seconds (six per minute), capped at 1280 pixels wide. `FasterWhisperInitializer` loads `models/faster_whisper_small/` only for extracted audio, and `speech_service.py` persists the transcript onto a semantic text element before unloading the model. Sampled frames flow to the existing Qwen2.5-VL stage. Runtime is offline after Docker build and one-time model staging:
+
+```bash
+python scripts/download_models.py --select faster_whisper
+```

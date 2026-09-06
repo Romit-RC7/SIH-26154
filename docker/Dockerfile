@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # Multi-stage Dockerfile for SIH-26154 Semantic Document Processing System
 # Base Python 3.12 runtime with C++ runtime, Poppler, OpenCV, and PaddleOCR dependencies
 
@@ -22,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     libspatialindex-dev \
     poppler-utils \
+    ffmpeg \
     libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -31,9 +33,10 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 
 # Install Python packages with increased timeout and retries
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir --default-timeout=1000 --retries 5 -r requirements.txt && \
-    pip install --no-cache-dir --default-timeout=1000 --retries 5 paddlepaddle==3.0.0 paddleocr==3.7.0 "paddlex[ocr,multimodal]>=3.7.0,<3.8.0"
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip setuptools wheel && \
+    pip install --default-timeout=1000 --retries 5 -r requirements.txt && \
+    pip install --default-timeout=1000 --retries 5 paddlepaddle==3.0.0 paddleocr==3.7.0 "paddlex[ocr,multimodal]>=3.7.0,<3.8.0"
 
 # Copy application source code
 COPY backend/ /app/backend/

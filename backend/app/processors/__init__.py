@@ -13,6 +13,7 @@ from backend.app.processors.docx_parser import DOCXParser, docx_parser
 from backend.app.processors.pp_structure import PPStructureAnalyzer, pp_structure_analyzer
 from backend.app.processors.fallback_analyzer import FallbackStructureAnalyzer, fallback_analyzer
 from backend.app.processors.extractor import DocumentExtractor, document_extractor
+from backend.app.processors.video_parser import VideoParser, video_parser
 
 __all__ = [
     "BaseStructureAnalyzer",
@@ -29,4 +30,6 @@ __all__ = [
     "fallback_analyzer",
     "DocumentExtractor",
     "document_extractor",
+    "VideoParser",
+    "video_parser",
 ]

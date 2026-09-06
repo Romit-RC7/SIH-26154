@@ -5,6 +5,7 @@ unified Semantic Document JSON contract, and list processed documents.
 """
 
 import uuid
+from pathlib import Path
 from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import select, func
@@ -26,6 +27,7 @@ from backend.app.schemas.semantic_document import SemanticDocument
 from backend.app.services.storage_service import storage_service
 from backend.app.services.pipeline_service import pipeline_service
 from backend.app.utils.file_utils import validate_upload_filename, detect_mime_type
+from backend.app.processors.video_parser import video_parser
 
 router = APIRouter()
 
@@ -35,12 +37,15 @@ router = APIRouter()
     tags=["Documents"],
     response_model=DocumentUploadResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Upload PDF or DOCX Document",
+    summary="Upload Document, Image, or Video",
     description=(
-        "Uploads a PDF or DOCX file and places it in the bounded recognition queue. "
+        "Uploads PDF, DOCX, PPTX, image, or video files and places them in the bounded recognition queue. "
+        f"Video input supports MP4 (recommended), WebM, and MOV, up to {settings.MAX_UPLOAD_SIZE_MB} MB "
+        f"and {settings.VIDEO_MAX_DURATION_SECONDS // 60} minutes. "
         "Documents are processed in batches: PP-Structure handles layout, OCR, and "
         "tables; formula and chart models share a later stage; image/figure recognition "
-        "is optional. Poll the returned document ID for completion."
+        "is optional. Videos yield sampled frames for Qwen vision and a 16 kHz WAV track "
+        "for the optional Faster-Whisper transcription stage. Poll the returned document ID for completion."
     ),
 )
 async def upload_document(
@@ -72,6 +77,18 @@ async def upload_document(
                 status_code=413,
                 detail=f"File exceeds maximum allowed size of {settings.MAX_UPLOAD_SIZE_MB}MB"
             )
+
+        if Path(file.filename).suffix.lower() in {".mp4", ".mov", ".webm"}:
+            duration_seconds = video_parser.duration_seconds(target_path)
+            if duration_seconds > settings.VIDEO_MAX_DURATION_SECONDS:
+                storage_service.delete_document_artifacts(document_id)
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=(
+                        "Video exceeds maximum allowed duration of "
+                        f"{settings.VIDEO_MAX_DURATION_SECONDS // 60} minutes"
+                    ),
+                )
 
         mime_type = detect_mime_type(file.filename)
 

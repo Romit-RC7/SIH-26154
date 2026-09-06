@@ -53,6 +53,9 @@ class SystemDiagnostics:
 
                 "unichart_base_960":
                     cls.model_exists(models_root / "unichart_base_960"),
+
+                "faster_whisper_small":
+                    cls.model_exists(settings.FASTER_WHISPER_MODEL_DIR),
             },
 
             "storage": {
