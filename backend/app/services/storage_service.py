@@ -85,5 +85,32 @@ class StorageService:
         if doc_extract_dir.exists():
             shutil.rmtree(doc_extract_dir, ignore_errors=True)
 
+    def save_image_crop(
+        self,
+        image,
+        document_id: str,
+        element_id: str,
+        ext: str = "png"
+    ) -> str:
+
+        doc_extract_dir = self.extracted_dir / document_id
+        doc_extract_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = f"{element_id}.{ext}"
+        file_path = doc_extract_dir / filename
+
+        logger.info(f"Saving image crop -> {file_path}")
+
+        if isinstance(image, Image.Image):
+            image.save(file_path, format=ext.upper())
+
+        elif isinstance(image, bytes):
+            with open(file_path, "wb") as f:
+                f.write(image)
+
+        logger.info(f"Saved image crop -> {file_path}")
+
+        return str(file_path.relative_to(settings.BASE_DIR)).replace("\\", "/")
+
 
 storage_service = StorageService()

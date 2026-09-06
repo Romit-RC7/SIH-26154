@@ -15,6 +15,8 @@ from backend.app.services.storage_service import storage_service
 from backend.app.services.recognition import recognition_coordinator
 from backend.app.core.config import settings
 from backend.app.core.logging import logger
+from backend.app.processors.ppt_parser import ppt_parser
+from backend.app.processors.image_parser import image_parser
 import fitz
 
 
@@ -37,8 +39,25 @@ class DocumentExtractor:
             return self._extract_pdf(file_path, document_id, run_specialist_recognition, unload_structure)
         elif extension == ".docx":
             return self._extract_docx(file_path, document_id, run_specialist_recognition, unload_structure)
+            return self._extract_docx(file_path, document_id)
+
+        elif extension == ".pptx":
+            return self._extract_pptx(file_path, document_id, run_specialist_recognition, unload_structure)
+
+        elif extension in {
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".webp",
+            ".bmp",
+            ".tiff"
+        }:
+            return self._extract_image(file_path, document_id, run_specialist_recognition, unload_structure)
+
         else:
-            raise ValueError(f"Unsupported document extension: {extension}")
+            raise ValueError(
+                f"Unsupported document extension: {extension}"
+            )
 
     def _extract_pdf(
         self,
@@ -146,6 +165,95 @@ class DocumentExtractor:
             pp_structure_analyzer.unload()
 
         meta["extracted_elements_count"] = len(processed)
+        return processed, meta
+
+
+    def _extract_pptx(
+        self,
+        file_path: Path,
+        document_id: str,
+        run_specialist_recognition: bool = True,
+        unload_structure: bool = True,
+    ):
+        _, raw_elements, meta = ppt_parser.parse(file_path)
+
+        processed = []
+
+        for idx, elem in enumerate(raw_elements):
+
+            element_id = (
+                f"elem_{document_id[:8]}_{elem.page}_{idx + 1}"
+            )
+
+            elem.attributes["element_id"] = element_id
+
+            if elem.image is not None:
+                try:
+                    rel_path = storage_service.save_image_crop(
+                        image=elem.image,
+                        document_id=document_id,
+                        element_id=element_id,
+                        ext="png"
+                    )
+
+                    elem.attributes["saved_image_path"] = rel_path
+
+                except Exception as e:
+                    logger.warning(
+                        f"Could not persist PPTX image {element_id}: {e}"
+                    )
+
+            processed.append(elem)
+        if run_specialist_recognition:
+            recognition_coordinator.recognize(processed)
+        if unload_structure:
+            pp_structure_analyzer.unload()
+        meta["extracted_elements_count"] = len(processed)
+
+        return processed, meta
+
+    def _extract_image(
+        self,
+        file_path: Path,
+        document_id: str,
+        run_specialist_recognition: bool = True,
+        unload_structure: bool = True,
+    ):
+        _, raw_elements, meta = image_parser.parse(file_path)
+
+        processed = []
+
+        for idx, elem in enumerate(raw_elements):
+
+            element_id = (
+                f"elem_{document_id[:8]}_{elem.page}_{idx + 1}"
+            )
+
+            elem.attributes["element_id"] = element_id
+
+            if elem.image is not None:
+                try:
+                    rel_path = storage_service.save_image_crop(
+                        image=elem.image,
+                        document_id=document_id,
+                        element_id=element_id,
+                        ext="png"
+                    )
+
+                    elem.attributes["saved_image_path"] = rel_path
+
+                except Exception as e:
+                    logger.warning(
+                        f"Could not persist PPTX image {element_id}: {e}"
+                    )
+
+            processed.append(elem)
+        if run_specialist_recognition:
+            recognition_coordinator.recognize(processed)
+        if unload_structure:
+            pp_structure_analyzer.unload()
+        meta["extracted_elements_count"] = len(processed)
+
         return processed, meta
 
 
