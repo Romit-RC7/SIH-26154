@@ -1,136 +1,82 @@
 # Architecture Implementation Roadmap: AI-Powered Content Transformation Engine (SIH-26154)
 
-This roadmap outlines how every future AI module interfaces with the **Semantic Document JSON System Contract** built in Phase 1.
+All architectural phases of the **SIH-26154 Content Transformation Engine** are fully implemented, verified, and integrated.
 
 ---
 
-## The Contract-Centric Architecture
+## Contract-Centric Architecture
 
 ```
-Raw Multimodal Input (PDF / DOCX)
+Raw Multimodal Input (PDF / DOCX / PPTX / Images / Video MP4)
                 ↓
-    [ Phase 1: Semantic Document Processing ]
+    [ Stage 1: Document Processing & Intelligence ]
                 ↓
      ⭐ Semantic Document JSON Contract ⭐
-                │
-    ┌───────────┼───────────┬───────────┐
-    ↓           ↓           ↓           ↓
- Phase 2     Phase 3     Phase 4     Phase 5-8
- Qwen2.5-VL  Knowledge   Intent &    Orchestrator
- Visual      Engine &    Persona     & Generative
- Intel       pgvector    Settings    Multi-Outputs
+                ↓
+    [ Stage 2: Visual Intelligence (UniChart + Qwen2.5-VL) ]
+                ↓
+    [ Stage 3: Knowledge Engine & pgvector (BGE + Qwen3-4B) ]
+                ↓
+     ⭐ KnowledgePackage Payload ⭐
+                ↓
+    [ Stage 4: Content Orchestrator (Qwen3-8B Generation) ]
+                ↓
+    [ Stage 5: Trust, Validation & Schema Enforcement Layer ]
+                ↓
+    [ Stage 6: Multi-Format Output Export Builders (.docx, .pptx, .pdf, .zip) ]
 ```
 
 ---
 
-## Phase Breakdown
+## Phase Execution Summary
 
 ### Phase 1: Document Processing & Semantic Foundation (Completed)
-- **Scope**:
-  - FastAPI web server and dependency container.
-  - Multi-page PDF rasterization (PyMuPDF) and DOCX parsing.
-  - PP-StructureV3 layout analysis, table recognition, and OCR (with automatic fallback).
-  - Multi-modal extraction: figure/chart visual cropping and storage.
-  - Semantic Fusion Engine: reading order reconciliation and caption linking.
-  - Assembly & validation of `SemanticDocument` JSON.
-  - PostgreSQL 16 persistence (JSONB document + relational elements).
-
-#### Recognition Execution Model
-
-The recognition pipeline is staged to support offline execution on constrained
-hardware. PP-Structure currently runs layout detection, OCR, and table
-recognition together and produces stable region IDs and crops. Formula and
-chart recognition then run together on their matching regions, followed by
-Qwen2.5-VL for visual regions and Qwen3-8B for structured fusion.
-The resource manager limits resident model groups based on available RAM/VRAM,
-unloads each stage before the next one, and never downloads weights at runtime.
+- FastAPI web server and dependency container.
+- Multi-page PDF rasterization (PyMuPDF), DOCX parsing, PPTX parsing, and standalone Image parsing.
+- Offline Video Ingestion: MP4, WebM, MOV with FFmpeg 16kHz mono WAV extraction and 10s frame sampling.
+- PP-StructureV3 layout analysis, table recognition (SLANet), and OCR (with automatic PyMuPDF fallback).
+- Multi-modal extraction: figure/chart visual cropping and storage under `uploads/extracted/`.
+- Semantic Fusion Engine: reading order reconciliation and caption linking.
+- Assembly & validation of `SemanticDocument` JSON.
+- PostgreSQL 16 persistence (JSONB document + relational elements).
 
 ---
 
-### Phase 2: Visual Intelligence (Qwen2.5-VL-3B Q4)
-- **Objective**: Multimodal visual understanding of diagrams, charts, infographics, and flowcharts.
-- **Contract Interface**:
-  - Filters `SemanticDocument.elements` where `type IN ('figure', 'chart', 'image')`.
-  - Reads `image_path` from element content.
-  - Inferences using Qwen2.5-VL-3B (quantized Q4 via Ollama / llama.cpp / vLLM).
-  - Injects generated descriptions, data trends, diagram flows, and key takeaways into `element.content.raw_attributes["visual_analysis"]`.
-
-Chart parsing and formula recognition share one specialist stage before visual
-fusion: PP-Chart2Table handles chart-to-table extraction, while PP-FormulaNet
-handles formula-to-LaTeX extraction. Their outputs retain the source element ID
-and are passed to the fusion model as structured evidence. Image and figure
-recognition is owned by a separate Qwen2.5-VL service.
-
-The current implementation locations are:
-
-- `backend/app/services/model_initializer/`: lazy PP-Structure, Qwen, and UniChart initializers.
-- `backend/app/services/recognition/coordinator.py`: staged and batch coordination.
-- `backend/app/services/recognition/chart_service.py`: PP-Chart2Table recognition.
-- `backend/app/services/recognition/image_service.py`: Qwen2.5-VL image/figure recognition.
-- `backend/app/processors/extractor.py`: parser, layout, crop, and recognition orchestration.
+### Phase 2: Visual Intelligence & Specialist Models (Completed)
+- `UniChart-Base-960` for plot and chart data table extraction.
+- `Qwen2.5-VL-3B Q4` GGUF for visual diagram, figure, and flowchart explanation.
+- `Faster-Whisper-small` for speech-to-text audio transcription.
 
 ---
 
-### Phase 3: Embeddings + pgvector + Knowledge Engine
-- **Objective**: Semantic search, knowledge graph formation, and factual claim extraction.
-- **Contract Interface**:
-  - **Embedding Engine**:
-    - Chunks text and table elements (`BGE-large-en-v1.5` or `BGE-M3`).
-    - Stores vector embeddings in PostgreSQL `pgvector` table linked by `element_id`.
-  - **Knowledge Engine**:
-    - Extracts named entities -> populates `SemanticDocument.entities`.
-    - Extracts factual propositions -> populates `SemanticDocument.claims`.
-    - Maps entity triples -> populates `SemanticDocument.relationships`.
-    - Tracks source element IDs for end-to-end provenance.
+### Phase 3: Embeddings + pgvector + Knowledge Engine (Completed)
+- Structure-aware chunking and text cleaning (`text_cleaner.py`, `chunker.py`).
+- `BGE-small-en-v1.5` 384-dimensional dense vector embeddings.
+- PostgreSQL `pgvector` index and sub-second cosine similarity search (`retrieval_service.py`).
+- `KnowledgeEngine`: Qwen3-4B factual claim extraction, named entity linking, and pre-compiled `orchestrator_prompt_context`.
 
 ---
 
-### Phase 4: Intent & Personalization Engine
-- **Objective**: Translating user configuration into structured content generation parameters.
-- **Inputs**:
-  - User Configuration: Output Selection (LinkedIn, Exec Summary, PPT, Video), Target Audience, Tone, Language, Style, Detail Level, Objective.
-  - Target `document_id`.
-- **Outputs**:
-  - Execution Plan specifying which semantic elements, claims, and visual insights are prioritized.
+### Phase 4: Content Orchestrator & Generation Engine (Completed)
+- `IntentAndPersonalization` schema capturing user target persona, tone, language, objective, detail level, and focus keywords.
+- Format-specific static prompt builder (`prompt_builder.py`).
+- `Qwen3-8B Q4` GGUF generation service with dynamic VRAM-aware GPU layer allocation ($\ge 5.5\text{ GB}$ full GPU, partial, or CPU fallback).
+- Multi-format fanout: sequential generation of LinkedIn Posts, Twitter Threads, Executive Summaries, Presentation Decks, Infographic Briefs, Video Scripts, and Blog Posts.
 
 ---
 
-### Phase 5: Content Orchestrator & Prompt Builder
-- **Objective**: Dynamic prompt construction and context window optimization.
-- **Contract Interface**:
-  - Retrieves prioritized elements, claims, and tables from `SemanticDocument`.
-  - Compiles structured prompts containing exact source citations.
-  - Coordinates multi-output generation controllers.
+### Phase 5: Trust, Validation & Schema Enforcement Layer (Completed)
+- **Fact Checker & Grounding Analysis**: Sentence-level BGE cosine similarity matching against `KnowledgePackage` evidence, producing a Trust Score ($0.0 \text{--} 1.0$) and claim verifications.
+- **Schema Validator**: Rule engine checking LinkedIn word bounds, Twitter 280-char tweet limits, Slide counts, and Video scene rules.
+- **Automated Repair Loop**: Qwen3-4B targeted repair loop (max 2 retries) with hard truncation fallbacks.
+- Master `TrustService` integrated directly into `OrchestratorService` pipeline.
 
 ---
 
-### Phase 6: Main LLM Integration (Ollama Hosted)
-- **Objective**: High-reasoning generation across chosen output targets.
-- **Tech**: Ollama (e.g. Llama 3.1 / Qwen 2.5 / DeepSeek).
-- **Execution**: Reasoning, synthesis, and creative drafting tailored to the persona.
-
----
-
-### Phase 7: Guardrails, Validation & Schema Enforcement
-- **Objective**: Anti-hallucination, fact verification, and strict schema compliance.
-- **Features**:
-  - Cross-references generated statements against `SemanticDocument.claims` and `sources`.
-  - Hallucination score and confidence metric.
-  - Strict JSON schema enforcement for downstream presentation builders.
-
----
-
-### Phase 8: Multi-Format Output Generation
-- **Target Formats**:
-  1. **LinkedIn Post**: Engaging copy with hashtags, takeaways, and call-to-action.
-  2. **Twitter / X Thread**: Bite-sized insight sequence with data highlights.
-  3. **Executive Summary**: Structured PDF / DOCX advisory report.
-  4. **Presentation Deck**: Slide outline with titles, bullet points, speaker notes, and diagram references (PPTX / HTML).
-  5. **Infographic Package**: Visual design blueprint and key data callouts.
-  6. **Video Script Package**: Scene-by-scene storyboard, narration, subtitles, and visual suggestions.
-
----
-
-## Current Video Ingestion Extension
-
-Phase 1 now includes offline video ingestion. MP4, WebM, and MOV uploads are limited to 100 MB and two minutes. FFmpeg extracts a 16 kHz mono audio artifact for Faster-Whisper-small and samples video frames every 10 seconds for Qwen2.5-VL. The speech stage runs only for audio-bearing videos and unloads before the visual stage, preserving resource-aware staged model residency.
+### Phase 6: Multi-Format Output Export Layer (Completed)
+- `DocxFormatter`: Generates Word `.docx` documents using `python-docx`.
+- `PptxFormatter`: Generates 16:9 widescreen PowerPoint `.pptx` decks with speaker notes using `python-pptx`.
+- `PdfFormatter`: Generates publication-ready PDFs using ReportLab and PyMuPDF.
+- `VideoPackageBuilder`: Generates Video Deliverable `.zip` containing `.srt` subtitles, `script_storyboard.json`, and visual cues markdown.
+- `InfographicPackageBuilder`: Generates Infographic Deliverable `.zip` containing `render_template.html` interactive preview and key metrics summary.
+- Export REST endpoint: `POST /api/v1/export/download`.

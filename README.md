@@ -1,257 +1,161 @@
 # AI-Powered Content Transformation Platform (SIH-26154)
 
-## Phase 1: Foundational Semantic Document Processing System
-
-Phase 1 provides the foundational document intelligence and semantic extraction engine. It ingests document formats (**PDF** and **DOCX**), runs structural layout analysis using **PP-StructureV3** (with an intelligent fallback layer), extracts text, tables, figures, and charts, and normalizes them into a unified **Semantic Document JSON**.
-
-> [!IMPORTANT]
-> **The System Contract**:
-> The `Semantic Document JSON` acts as the canonical system contract across the entire platform. Every downstream AI module (Qwen2.5-VL visual enricher, BGE Embedding Engine, pgvector semantic search, Knowledge Graph builder, Content Orchestrator, and Multi-Format Output Generators) consumes this structured contract rather than raw unstructured files.
+> **SIH-26154 Solution**: An intelligent, AI-powered content transformation platform that ingests unstructured source documents, articles, reports, prompts, images, or videos, and converts them into customizable, multi-format communication deliverables (LinkedIn Posts, Twitter/X Threads, Executive Summaries, Presentation Decks, Infographic Packages, and Video Storyboards with Subtitles).
 
 ---
 
-## Architecture Flow
+## System Architecture Pipeline (End-to-End)
 
 ```
-PDF / DOCX Upload
-  ↓
-Document Parser (PyMuPDF / docx)
-  ↓
-Offline PP-Structure Stage (Layout + OCR + Tables)
-  ↓
-Region Crops and Intermediate Recognition Document
-  ↓
-Formula + Chart Recognition (shared staged model residency)
-  ↓
-Image/Figure Recognition (Qwen2.5-VL)
-  ↓
-Qwen3-4B Fusion Stage
-  ↓
-Semantic Fusion Engine (reading order, captions, structure)
-  ↓
-Semantic Document Builder
+Multi-Format Ingestion (PDF / DOCX / PPTX / Images / Video MP4)
        ↓
-Unified Semantic Document JSON (Pydantic Schema)
+[Stage 1: Document Intelligence & Semantic Parsing]
+  - PP-StructureV3 (Layout, OCR, Table SLANet)
+  - PyMuPDF / python-docx / python-pptx / FFmpeg
        ↓
-PostgreSQL Storage (JSONB document + relational elements)
-```
-
-    Recognition stages are resource-aware. PP-Structure currently loads layout,
-    OCR, and table submodels together. Formula and chart models are then loaded
-    together for one batch stage, followed by Qwen2.5-VL for images and figures.
-    All model paths are local and missing optional weights must disable only that
-    stage, never trigger a runtime download.
-
----
-
-## The Semantic Document Schema (System Contract)
-
-```json
-{
-  "version": "1.0.0",
-  "document_id": "7b8f9e1a-4c2d-4e9f-8a1b-0c2d3e4f5a6b",
-  "metadata": {
-    "file_name": "quarterly_brief.pdf",
-    "file_size": 248102,
-    "mime_type": "application/pdf",
-    "page_count": 4,
-    "title": "Quarterly Financial Analysis",
-    "created_at": "2026-09-04T10:15:30Z",
-    "sha256": "3a7b9c1d2e...",
-    "extra": {}
-  },
-  "elements": [
-    {
-      "id": "elem_7b8f9e1a_1_1",
-      "type": "text",
-      "page": 1,
-      "bbox": [50.0, 72.0, 545.0, 110.0],
-      "content": {
-        "text": "Executive Summary and Strategic Goals...",
-        "reading_order": 1,
-        "confidence": 0.98
-      }
-    },
-    {
-      "id": "elem_7b8f9e1a_1_2",
-      "type": "table",
-      "page": 1,
-      "bbox": [50.0, 130.0, 545.0, 280.0],
-      "content": {
-        "markdown": "| Metric | Target | Actual |\n| --- | --- | --- |\n| Revenue | $5M | $5.4M |",
-        "html": "<table>...</table>",
-        "reading_order": 2,
-        "caption": "Table 1: Financial Performance Overview",
-        "confidence": 0.97
-      }
-    },
-    {
-      "id": "elem_7b8f9e1a_2_1",
-      "type": "figure",
-      "page": 2,
-      "bbox": [60.0, 90.0, 520.0, 360.0],
-      "content": {
-        "image_path": "uploads/extracted/7b8f9e1a/elem_7b8f9e1a_2_1.png",
-        "caption": "Figure 1: Platform User Growth",
-        "reading_order": 3
-      }
-    }
-  ],
-  "entities": [],
-  "claims": [],
-  "relationships": [],
-  "sources": [
-    {
-      "id": "src_7b8f9e1a_1",
-      "title": "quarterly_brief.pdf",
-      "citation": "Original Document: quarterly_brief.pdf"
-    }
-  ]
-}
+⭐ Canonical System Contract: Unified Semantic Document JSON ⭐
+       ↓
+[Stage 2: Visual Intelligence]
+  - UniChart (Chart-to-Table & Data Comprehension)
+  - Qwen2.5-VL-3B (Diagrams, Figures, Visual Reasoning)
+       ↓
+[Stage 3: Knowledge & Retrieval Layer]
+  - BGE-small-en-v1.5 (384-dim dense vector embeddings)
+  - PostgreSQL 16 + pgvector (sub-second cosine similarity search)
+  - Knowledge Engine (Qwen3-4B claims & entity extraction)
+       ↓
+⭐ KnowledgePackage Payload (Grounding Evidence & Strategy Blueprint) ⭐
+       ↓
+[Stage 4: Content Orchestrator & Generation Layer]
+  - Format-specific static prompt builder
+  - Qwen3-8B Q4 GGUF (VRAM-aware GPU offload / CPU fallback)
+       ↓
+[Stage 5: Trust, Validation & Schema Enforcement Layer]
+  - BGE sentence-level fact verification & hallucination scoring (Trust Score 0-100%)
+  - Schema rule enforcement & automated Qwen3-4B repair loop
+       ↓
+[Stage 6: Multi-Format Output Generation & Export Layer]
+  - DocxFormatter (.docx), PptxFormatter (.pptx), PdfFormatter (.pdf)
+  - VideoPackageBuilder (.srt, script_storyboard.json, b-roll .zip)
+  - InfographicPackageBuilder (interactive HTML preview, metrics .zip)
 ```
 
 ---
 
-## Tech Stack
+## Supported Input & Output Deliverables
 
-- **Language & Runtime**: Python 3.12
-- **API Framework**: FastAPI with modern asynchronous endpoints
-- **Database**: PostgreSQL 16 (`pgvector/pgvector:pg16` ready for Phase 3)
-- **ORM**: SQLAlchemy 2.0 (AsyncSession with `asyncpg`, sync fallback)
-- **Data Contract & Validation**: Pydantic v2
-- **Document & PDF Parsing**: PyMuPDF (`fitz`), `python-docx`
-- **Structure & Layout OCR**: PP-StructureV3 (`paddleocr`), with automatic fallback
-- **Containerization**: Docker & Docker Compose
+### Ingestion Formats
+- **PDF**: Multi-page layout analysis, table matrix extraction, visual crops.
+- **DOCX**: Hierarchical headings, native tables, embedded images.
+- **PPTX**: Slide-by-slide shapes, speaker notes, table matrix data.
+- **Images**: PNG, JPG, JPEG, WEBP, BMP, TIFF visual elements.
+- **Video**: MP4, WebM, MOV (FFmpeg 16kHz mono audio extraction + frame sampling every 10s + Faster-Whisper transcription).
 
----
+### Generated Output Deliverables
 
-## Folder Structure
-
-```
-backend/
-├── app/
-│   ├── api/
-│   │   ├── deps.py                 # Dependency injection (DB session)
-│   │   └── v1/
-│   │       ├── api.py              # Router aggregation
-│   │       └── endpoints/
-│   │           ├── documents.py    # POST /upload, GET /{id}, GET /{id}/semantic, GET /
-│   │           └── health.py       # GET /health
-│   ├── core/
-│   │   ├── config.py               # Settings (Pydantic BaseSettings)
-│   │   └── logging.py              # Structured logging
-│   ├── database/
-│   │   ├── base.py                 # SQLAlchemy DeclarativeBase
-│   │   └── session.py              # Async / Sync engine & session management
-│   ├── models/
-│   │   ├── document.py             # Document model
-│   │   ├── document_element.py     # DocumentElement model
-│   │   └── processing_job.py       # ProcessingJob model
-│   ├── schemas/
-│   │   ├── semantic_document.py    # System Contract (Pydantic v2)
-│   │   ├── document.py             # Request & Response schemas
-│   │   └── processing_job.py       # Job tracking schema
-│   ├── processors/
-│   │   ├── base.py                 # Base analyzer abstractions
-│   │   ├── pdf_parser.py           # PyMuPDF rasterizer & text block parser
-│   │   ├── docx_parser.py          # DOCX parser (paragraphs, tables, media)
-│   │   ├── pp_structure.py         # PP-StructureV3 integration
-│   │   ├── fallback_analyzer.py    # Geometry & PyMuPDF fallback analyzer
-│   │   └── extractor.py            # Normalization & visual crop persistence
-│   ├── services/
-│   │   ├── storage_service.py      # Local file & artifact management
-│   │   ├── semantic_fusion.py      # Reading order & caption linkage engine
-│   │   ├── semantic_builder.py     # Schema validation & assembly
-│   │   └── pipeline_service.py     # End-to-end asynchronous pipeline
-│   ├── utils/
-│   │   └── file_utils.py           # Hashing, MIME resolution, validation
-│   └── main.py                     # FastAPI application factory
-├── uploads/
-│   ├── raw/                        # Uploaded PDFs and DOCX files
-│   └── extracted/                  # Cropped figures, charts, and tables
-├── docker/
-│   ├── Dockerfile                  # Python 3.12 Dockerfile with OpenCV & Poppler
-│   └── docker-compose.yml          # FastAPI backend + PostgreSQL 16
-├── tests/
-│   ├── conftest.py                 # In-memory SQLite async fixtures
-│   ├── test_semantic_document.py   # Schema & builder unit tests
-│   ├── test_parsers.py             # Parser tests
-│   └── test_api.py                 # API endpoint tests
-├── requirements.txt
-├── .env.example
-└── ROADMAP.md                      # Phase 2-8 Architecture Roadmap
-```
+| Deliverable | Key Features | Default Export Format |
+|---|---|---|
+| **LinkedIn Post** | 150-300 words, opening hook, body, CTA, 3-5 hashtags | JSON / Text / Markdown |
+| **Twitter / X Thread** | 5-8 tweets, **strict $\le 280$ characters per tweet**, numbered sequence | JSON / Text |
+| **Executive Summary** | Title, overview, key findings, data callouts, recommendations, conclusion | `.pdf` / `.docx` |
+| **Presentation Deck** | 5-10 widescreen 16:9 slides, titles, bullet points, speaker notes, visual blueprints | `.pptx` |
+| **Infographic Package** | Punchy headline, numeric stats, visual layout sections, interactive HTML preview | `.zip` (HTML/SVG/JSON) |
+| **Video Script Package** | Scene storyboard, voiceover narration, visual cues, `.srt` subtitle timing file | `.zip` (.srt/JSON/MD) |
+| **Blog Post / Article** | SEO meta description, H2 section headings, takeaways, tags | `.docx` |
 
 ---
 
-## API Reference
+## Staged Offline Models & Memory Management
 
-### 1. Upload Document
+All required AI weights run completely offline after initial download. Memory management is hardware-aware:
+
+| Model Directory | Identifier | Hardware Allocation & Fallback |
+|---|---|---|
+| `models/pp_structure_v3/` | PP-StructureV3 | Offline OCR & Layout Parser ($\approx 600\text{ MB RAM}$) |
+| `models/bge_small_en_v1.5/` | BGE-small-en-v1.5 | ONNX / Transformers dense vector embedding ($133\text{ MB}$) |
+| `models/qwen2.5_vl_3b_q4/` | Qwen2.5-VL-3B Q4 | Multimodal visual reasoning via llama-cpp |
+| `models/qwen3_4b_q4/` | Qwen3-4B Q4 | Knowledge Engine & automated schema repair loop |
+| `models/qwen3_8b_q4/` | Qwen3-8B Q4 | Main generation LLM ($\ge 5.5\text{GB VRAM}$ GPU, $3\text{--}5.5\text{GB}$ partial, or CPU fallback) |
+| `models/faster_whisper_small/` | Faster-Whisper-small | Audio transcription (loaded only when video contains audio) |
+
+---
+
+## REST API Reference
+
+### 1. Document Upload & Ingestion
 ```bash
 POST /api/v1/documents/upload
 Content-Type: multipart/form-data
-
-file: <document.pdf | document.docx>
-```
-**Response (201 Created)**:
-```json
-{
-  "message": "Document accepted and enqueued for semantic processing",
-  "document_id": "7b8f9e1a-4c2d-4e9f-8a1b-0c2d3e4f5a6b",
-  "job_id": "0c1b2a3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d",
-  "status": "PENDING",
-  "filename": "quarterly_brief.pdf"
-}
+file: <pdf | docx | pptx | image | mp4>
 ```
 
-### 2. Get Document Status & Metadata
-```bash
-GET /api/v1/documents/{document_id}
-```
-**Response (200 OK)**:
-```json
-{
-  "id": "7b8f9e1a-4c2d-4e9f-8a1b-0c2d3e4f5a6b",
-  "filename": "quarterly_brief.pdf",
-  "file_size": 248102,
-  "mime_type": "application/pdf",
-  "page_count": 4,
-  "status": "COMPLETED",
-  "element_count": 18,
-  "created_at": "2026-09-04T10:15:30Z",
-  "updated_at": "2026-09-04T10:15:38Z"
-}
-```
-
-### 3. Get Unified Semantic Document JSON (System Contract)
+### 2. Semantic Document JSON (System Contract)
 ```bash
 GET /api/v1/documents/{document_id}/semantic
 ```
-Returns the complete validated `SemanticDocument` JSON.
 
-### 4. List Documents
+### 3. Knowledge Engine Retrieval & Assembly
 ```bash
-GET /api/v1/documents?skip=0&limit=20&status=COMPLETED
+POST /api/v1/knowledge/assemble/{document_id}
+Content-Type: application/json
+{
+  "output_type": "executive_summary",
+  "audience": "executive",
+  "tone": "professional",
+  "objective": "Summarize key findings and ROI metrics."
+}
 ```
 
-### 5. Health Check
+### 4. Content Orchestrator & Multi-Format Generation
 ```bash
-GET /api/v1/health
+POST /api/v1/generate/{document_id}
+Content-Type: application/json
+{
+  "output_types": ["linkedin_post", "twitter_thread", "executive_summary", "presentation_deck", "video_script"],
+  "audience": "executive",
+  "tone": "professional",
+  "detail_level": "moderate",
+  "objective": "Highlight main security vulnerabilities and patching timelines.",
+  "focus_keywords": ["Vulnerability", "Zero-day", "Patching"]
+}
+```
+
+### 5. Trust & Validation Inspection
+```bash
+POST /api/v1/validate/{document_id}
+Content-Type: application/json
+{ ... GeneratedArtefact payload ... }
+```
+
+### 6. Binary Deliverable Export & Download
+```bash
+POST /api/v1/export/download
+Content-Type: application/json
+{
+  "artefact": { ... GeneratedArtefact payload ... },
+  "format": "docx"  # docx | pptx | pdf | zip | json
+}
 ```
 
 ---
 
 ## Quickstart Guide
 
-### Option A: Running with Docker Compose (Recommended)
+### Option A: Docker Compose (Recommended)
 
-1. Make sure Docker is running.
-2. Build and start services:
+1. **CPU Default Mode**:
    ```bash
    cd docker
    docker-compose up --build
    ```
-3. Open API docs at `http://localhost:8000/docs`.
+
+2. **NVIDIA GPU Mode**:
+   ```bash
+   cd docker
+   docker-compose --profile gpu up --build
+   ```
+
+3. Access interactive Swagger API documentation at: `http://localhost:8000/docs`.
 
 ### Option B: Local Python Development
 
@@ -261,40 +165,28 @@ GET /api/v1/health
    source venv/bin/activate  # or venv\Scripts\activate on Windows
    pip install -r requirements.txt
    ```
+
 2. Copy environment settings:
    ```bash
    cp .env.example .env
    ```
-3. Start the FastAPI server:
+
+3. Download local model weights (selective or full):
+   ```bash
+   python scripts/download_models.py
+   ```
+
+4. Start FastAPI server:
    ```bash
    uvicorn backend.app.main:app --reload --port 8000
    ```
 
 ---
 
-## Running the Automated Test Suite
+## Running Test Suite
 
 ```bash
 pytest backend/tests -v
 ```
-All unit tests and API integration tests run against an in-memory SQLite database, requiring zero external infrastructure.
 
----
-
-## Current Video & Offline Recognition Support
-
-The pipeline accepts PDF, DOCX, PPTX, images, and short videos. Video uploads accept **MP4** (preferred), **WebM**, and **MOV**, with a **100 MB** and **two-minute** limit. FFmpeg extracts a 16 kHz mono WAV track and samples one frame every 10 seconds (six per minute, maximum width 1280px). PP-Structure OCR supplies text evidence for every sampled video frame before Qwen2.5-VL performs video/HMI-aware visual analysis. Faster-Whisper-small transcribes audio only when it exists; Qwen2.5-VL receives only persisted visual crops.
-
-All model stages are local and unload after their applicable batch stage. Download the speech model once with:
-
-```bash
-python scripts/download_models.py --select faster_whisper
-```
-
-Docker installs FFmpeg and Faster-Whisper. Use BuildKit when rebuilding:
-
-```powershell
-cd docker
-$env:DOCKER_BUILDKIT=1
-docker compose up --build
-```
+All 75+ unit and integration tests execute against isolated test fixtures.

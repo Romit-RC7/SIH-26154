@@ -41,3 +41,5 @@ models/
 *.safetensors
 *.bin
 *.onnx
+
+scripts/benchmark_vlms.py

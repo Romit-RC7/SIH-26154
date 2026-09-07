@@ -1,4 +1,56 @@
 # SIH-26154 — Change History
+
+## Session 10 — 2026-09-08 — Trust & Validation Layer (Stage 5) and Multi-Format Export Builders (Stage 6)
+
+### What was done
+
+- **Implemented Stage 5: Trust, Validation & Schema Enforcement**:
+  - `backend/app/schemas/validation.py`: Added `ClaimVerification`, `ValidationReport`, `VerifiedArtefact` schemas.
+  - `backend/app/services/validation/fact_checker.py`: Fact verification using BGE sentence-level cosine similarity grounding and token overlap fallbacks.
+  - `backend/app/services/validation/schema_validator.py`: Format constraint rule engine (LinkedIn word bounds, Twitter 280-char tweet check, Slide counts, Video scene rules).
+  - `backend/app/services/validation/repair_service.py`: Automated repair loop (max 2 attempts) with hard truncation fallbacks.
+  - `backend/app/services/validation/trust_service.py`: Master Trust coordinator integrating fact checking, schema validation, and auto-repair.
+  - `backend/app/api/v1/endpoints/validate.py`: REST endpoint `POST /api/v1/validate/{document_id}`.
+  - Integrated `trust_service` directly into `orchestrator_service.py` so all generated content automatically receives Trust Scores and schema enforcement.
+
+- **Implemented Stage 6: Multi-Format Output Generation & Export Layer**:
+  - `backend/app/services/formatters/docx_formatter.py`: Professional Word `.docx` generator using `python-docx`.
+  - `backend/app/services/formatters/pptx_formatter.py`: 16:9 Widescreen PowerPoint `.pptx` deck builder with speaker notes using `python-pptx`.
+  - `backend/app/services/formatters/pdf_formatter.py`: Publication PDF document builder using ReportLab and PyMuPDF.
+  - `backend/app/services/formatters/video_package_builder.py`: Video Package `.zip` builder producing `.srt` subtitles, `script_storyboard.json`, and visual cues.
+  - `backend/app/services/formatters/infographic_package_builder.py`: Infographic Package `.zip` builder producing interactive HTML preview and key metrics summary.
+  - `backend/app/services/formatters/export_coordinator.py`: Master export manager persisting binary files to `uploads/exports/{document_id}/`.
+  - `backend/app/api/v1/endpoints/export.py`: REST endpoint `POST /api/v1/export/download`.
+
+- **Added Stage 5 & 6 Test Suites**:
+  - `test_fact_checker.py`, `test_schema_validator.py`, `test_formatters.py`, `test_export_api.py`.
+
+---
+
+## Session 9 — 2026-09-08 — Content Orchestrator & Multi-Format Generation Layer (Phase 4)
+
+### What was done
+
+- **Created Schema Models for Generated Artefacts** (`backend/app/schemas/generated_artefact.py`):
+  - Added structured content models: `LinkedInPostContent`, `TwitterThreadContent`, `ExecutiveSummaryContent`, `PresentationDeckContent`, `InfographicBriefContent`, `VideoScriptContent`, `BlogPostContent`.
+  - Added `GeneratedArtefact`, `GenerateRequest`, `GenerateResponse` contract models.
+- **Added Qwen3-8B Orchestrator Model Initializer** (`backend/app/services/model_initializer/qwen_initializers.py`):
+  - Implemented `QwenOrchestratorInitializer` with dynamic VRAM detection (`_determine_gpu_layers`).
+  - Automatic GPU offload on $\ge 5.5\text{ GB}$ VRAM, partial offload on $3.0\text{--}5.5\text{ GB}$, and graceful fallback to CPU mode / Qwen3-4B on lower-memory environments.
+- **Implemented Prompt Builder** (`backend/app/services/orchestrator/prompt_builder.py`):
+  - Built static format-specific prompt templates for all 8 output formats consuming `KnowledgePackage.orchestrator_prompt_context`.
+- **Implemented Response Parser** (`backend/app/services/orchestrator/response_parser.py`):
+  - Added JSON extraction from markdown code fences, trailing comma repair, and deterministic fallback builders.
+- **Implemented Qwen3 Generation & Orchestration Services** (`backend/app/services/orchestrator/`):
+  - `qwen3_generation_service.py`: Dispatches inference with format-specific temperature and max tokens.
+  - `orchestrator_service.py`: Coordinates knowledge assembly and sequential multi-format deliverable generation.
+- **Exposed REST API Endpoint** (`backend/app/api/v1/endpoints/generate.py`):
+  - `POST /api/v1/generate/{document_id}` with multi-format generation and full Swagger documentation.
+- **Added Comprehensive Unit & Integration Tests**:
+  - `test_prompt_builder.py`, `test_response_parser.py`, `test_orchestrator.py`, `test_generate_api.py`.
+
+---
+
 # Session 7 — 2026-09-06 — Offline Video, Faster-Whisper, and Build Caching
 
 ## What was done

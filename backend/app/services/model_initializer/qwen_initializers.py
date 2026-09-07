@@ -120,13 +120,101 @@ class QwenFusionInitializer(QwenModelInitializer):
         )
 
 
+class QwenOrchestratorInitializer(QwenModelInitializer):
+    """
+    Lazy Qwen3-8B initializer used for multi-format content orchestration and generation.
+    Includes VRAM-aware GPU layer allocation and graceful fallback to CPU or Qwen3-4B.
+    """
+
+    def __init__(self, model_dir: Optional[Path] = None, n_ctx: int = 8192):
+        super().__init__(
+            model_dir=model_dir or settings.MODELS_DIR / "qwen3_8b_q4",
+            model_pattern="Qwen3-8B*.gguf",
+            name="Qwen3-8B",
+            n_ctx=n_ctx,
+        )
+        self.active_model_name = "Qwen3-8B"
+
+    def _determine_gpu_layers(self) -> int:
+        """Calculates safe n_gpu_layers based on available VRAM."""
+        try:
+            import torch
+            if not torch.cuda.is_available():
+                return 0
+            vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+            logger.info("Detected CUDA device with %.2f GB VRAM", vram_gb)
+            if vram_gb >= 5.5:
+                return settings.N_GPU_LAYERS  # Full offload (-1)
+            elif vram_gb >= 3.0:
+                return 16  # Partial offload
+            else:
+                logger.warning("Low VRAM (%.2f GB) detected. Offloading 0 layers to GPU (CPU mode)", vram_gb)
+                return 0
+        except Exception as exc:
+            logger.warning("Could not probe VRAM (%s); using default config N_GPU_LAYERS", exc)
+            return settings.N_GPU_LAYERS
+
+    def load(self) -> Any:
+        if self.model is not None:
+            return self.model
+
+        # 1. Check primary 8B model path
+        model_path = self.model_path
+        if model_path is None:
+            # Fallback to Qwen3-4B if 8B is not downloaded
+            fallback_dir = settings.MODELS_DIR / "qwen3_4b_q4"
+            fallback_matches = sorted(fallback_dir.glob("Qwen3-4B*.gguf")) if fallback_dir.exists() else []
+            if fallback_matches:
+                logger.warning("Qwen3-8B not found in %s; falling back to Qwen3-4B at %s", self.model_dir, fallback_matches[0])
+                model_path = fallback_matches[0]
+                self.active_model_name = "Qwen3-4B (Fallback)"
+            else:
+                raise FileNotFoundError(
+                    f"Neither Qwen3-8B ({self.model_dir}) nor Qwen3-4B ({fallback_dir}) GGUF model files exist."
+                )
+
+        try:
+            from llama_cpp import Llama
+        except ImportError as exc:
+            raise RuntimeError(
+                "llama-cpp-python is required to load Qwen GGUF generation models"
+            ) from exc
+
+        n_gpu_layers = self._determine_gpu_layers()
+        logger.info("Loading Qwen Orchestrator: %s (n_gpu_layers=%s, n_ctx=%s)", model_path, n_gpu_layers, self.n_ctx)
+
+        try:
+            self.model = Llama(
+                model_path=str(model_path),
+                n_ctx=self.n_ctx,
+                n_gpu_layers=n_gpu_layers,
+                verbose=False,
+            )
+        except Exception as exc:
+            if n_gpu_layers != 0:
+                logger.warning("Failed to load on GPU (%s); attempting fallback on CPU...", exc)
+                self.model = Llama(
+                    model_path=str(model_path),
+                    n_ctx=self.n_ctx,
+                    n_gpu_layers=0,
+                    verbose=False,
+                )
+            else:
+                raise exc
+
+        return self.model
+
+
 qwen_vision_initializer = QwenVisionInitializer()
 qwen_fusion_initializer = QwenFusionInitializer()
+qwen_orchestrator_initializer = QwenOrchestratorInitializer()
 
 __all__ = [
     "QwenModelInitializer",
     "QwenVisionInitializer",
     "QwenFusionInitializer",
+    "QwenOrchestratorInitializer",
     "qwen_vision_initializer",
     "qwen_fusion_initializer",
+    "qwen_orchestrator_initializer",
 ]

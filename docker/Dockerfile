@@ -9,7 +9,9 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     DEBIAN_FRONTEND=noninteractive \
     PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 # Install system dependencies for PyMuPDF, OpenCV, PaddlePaddle, and llama-cpp-python C++ compilation
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -32,17 +34,20 @@ WORKDIR /app
 # Copy dependency definition
 COPY requirements.txt /app/requirements.txt
 
-# Install Python packages with increased timeout and retries
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip setuptools wheel && \
-    pip install --default-timeout=1000 --retries 5 -r requirements.txt && \
-    pip install --default-timeout=1000 --retries 5 paddlepaddle==3.0.0 paddleocr==3.7.0 "paddlex[ocr,multimodal]>=3.7.0,<3.8.0"
+# Install uv for faster dependency resolution
+RUN pip install --default-timeout=1000 --retries 5 uv
+
+# Install Python packages with uv (significantly faster)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system -r requirements.txt && \
+    uv pip install --system \
+    paddlepaddle==3.0.0 paddleocr==3.7.0 "paddlex[ocr,multimodal]>=3.7.0,<3.8.0"
 
 # Copy application source code
 COPY backend/ /app/backend/
 
 # Create uploads directories
-RUN mkdir -p /app/uploads/raw /app/uploads/extracted
+RUN mkdir -p /app/uploads/raw /app/uploads/extracted /app/uploads/exports
 
 # Expose FastAPI application port
 EXPOSE 8000
