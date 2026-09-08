@@ -145,3 +145,47 @@ def test_fact_checker_filters_irrelevant_visuals():
     for v in verifications:
         if v.matched_source_text:
             assert "selfie" not in v.matched_source_text.lower()
+
+
+def test_recognition_works_through_extracted_without_debug(tmp_path):
+    """Verify that recognition loads through extracted saved_image_path and creates no debug files."""
+    extracted_file = tmp_path / "crop.png"
+    img = Image.new("RGB", (100, 100), color="red")
+    img.save(extracted_file)
+
+    mock_model = MagicMock()
+    mock_model.create_chat_completion.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps({
+                        "visual_type": "diagram",
+                        "description": "System architecture flowchart",
+                        "visible_text": ["API Gateway"],
+                    })
+                }
+            }
+        ]
+    }
+
+    element = RawDocumentElement(
+        type="image",
+        page=1,
+        image=None,
+        attributes={
+            "element_id": "elem_test_1",
+            "saved_image_path": str(extracted_file),
+        }
+    )
+
+    assert image_recognition_service._has_image_source(element) is True
+    loaded_img = image_recognition_service._image_source(element)
+    assert loaded_img is not None
+    assert loaded_img.size == (100, 100)
+
+    image_recognition_service._recognize_element(mock_model, element)
+
+    assert element.attributes.get("debug_image_path") is None
+    assert "visual_analysis" in element.attributes
+    assert element.attributes["visual_analysis"]["visual_type"] == "diagram"
+
