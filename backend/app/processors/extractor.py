@@ -19,7 +19,7 @@ from backend.app.processors.ppt_parser import ppt_parser
 from backend.app.processors.image_parser import image_parser
 from backend.app.processors.video_parser import video_parser
 from backend.app.processors.text_parser import text_parser
-import fitz
+import pymupdf as fitz
 
 
 class DocumentExtractor:

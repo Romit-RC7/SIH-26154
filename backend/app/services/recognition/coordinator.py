@@ -24,6 +24,10 @@ class RecognitionCoordinator:
         self.models_root = models_root or settings.PP_STRUCTURE_MODEL_DIR
 
     def recognize(self, elements: List[RawDocumentElement]) -> List[RawDocumentElement]:
+        page_count = max([e.page for e in elements], default=1)
+        from backend.app.services.recognition.image_deduplicator import visual_deduplicator
+        visual_deduplicator.process_elements(elements, page_count=page_count)
+
         self._run_formula_chart_stage(elements)
         speech_recognition_service.recognize(elements)
         image_recognition_service.recognize(elements)
@@ -34,6 +38,11 @@ class RecognitionCoordinator:
         documents: List[List[RawDocumentElement]],
     ) -> List[List[RawDocumentElement]]:
         """Run each specialist once across all regions from a document batch."""
+        from backend.app.services.recognition.image_deduplicator import visual_deduplicator
+        for document_elements in documents:
+            page_count = max([e.page for e in document_elements], default=1)
+            visual_deduplicator.process_elements(document_elements, page_count=page_count)
+
         elements = [element for document in documents for element in document]
         self._run_formula_chart_stage(elements)
         speech_recognition_service.recognize(elements)

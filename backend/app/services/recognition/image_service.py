@@ -24,15 +24,18 @@ class ImageRecognitionService:
     model_name = "Qwen2.5-VL-3B"
 
     def recognize(self, elements: List[RawDocumentElement]) -> None:
-        # Do this check before loading Qwen: a layout label alone is not enough
-        # to justify a multi-GB model stage when no visual crop is available.
+        # Do this check before loading Qwen: skip decorative icons, emojis, and duplicate logos
         targets = [
             element
             for element in elements
-            if element.type in ("image", "figure") and self._has_image_source(element)
+            if element.type in ("image", "figure")
+            and self._has_image_source(element)
+            and not element.attributes.get("is_decorative_noise", False)
+            and not element.attributes.get("is_duplicate", False)
         ]
         if not targets:
-            logger.info("Skipping Qwen vision stage: no image or figure crops in this batch")
+            logger.info("Skipping Qwen vision stage: no primary image or figure crops in this batch")
+            self._propagate_duplicate_analysis(elements)
             return
         if not qwen_vision_initializer.is_available():
             self._mark_unavailable(targets)
@@ -47,10 +50,28 @@ class ImageRecognitionService:
             with manager.loaded() as model:
                 for element in targets:
                     self._recognize_element(model, element)
+            self._propagate_duplicate_analysis(elements)
         except Exception as exc:
             logger.warning("Visual image recognition unavailable: %s", exc)
             for element in targets:
                 self._mark_error(element, str(exc))
+
+    def _propagate_duplicate_analysis(self, elements: List[RawDocumentElement]) -> None:
+        primary_map = {}
+        for elem in elements:
+            elem_id = getattr(elem, "id", None) or elem.attributes.get("primary_element_id")
+            if elem.attributes.get("is_primary_visual") and "visual_analysis" in elem.attributes and elem_id:
+                primary_map[elem_id] = elem
+
+        for elem in elements:
+            if elem.attributes.get("is_duplicate"):
+                primary_id = elem.attributes.get("primary_element_id")
+                primary_elem = primary_map.get(primary_id)
+                if primary_elem and "visual_analysis" in primary_elem.attributes:
+                    elem.attributes["visual_analysis"] = primary_elem.attributes.get("visual_analysis")
+                    elem.attributes["visual_analysis_model"] = primary_elem.attributes.get("visual_analysis_model")
+                    elem.attributes["visual_analysis_status"] = primary_elem.attributes.get("visual_analysis_status")
+                    logger.debug("Propagated visual analysis from primary %s to duplicate element on page %s", primary_id, elem.page)
 
     def _recognize_element(self, model: Any, element: RawDocumentElement) -> None:
         image = self._image_source(element)

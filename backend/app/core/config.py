@@ -85,6 +85,10 @@ class Settings(BaseSettings):
     VIDEO_FRAME_DIFF_THRESHOLD: float = 0.03  # 3% average pixel difference threshold
     VIDEO_MAX_KEYFRAMES: int = 20              # Maximum keyframes to pass to visual recognition
     VIDEO_CANDIDATE_FPS: float = 0.333         # Sample candidate frames every ~3 seconds (fps=1/3)
+    VISUAL_MIN_DIMENSION_PX: int = 48          # Minimum width/height in px for VLM visual reasoning
+    VISUAL_MIN_AREA_PX: int = 2304             # Minimum area (48x48) to avoid processing emojis/micro-icons
+    VISUAL_DHASH_THRESHOLD: int = 4            # Hamming distance threshold for dHash perceptual image similarity
+    VISUAL_RECURRING_FREQ_THRESHOLD: float = 0.30  # Frequency threshold to flag repeating slide/template logos
     FASTER_WHISPER_DEVICE: str = "cuda"
     FASTER_WHISPER_COMPUTE_TYPE: str = "float16"
     USE_GPU: bool = True

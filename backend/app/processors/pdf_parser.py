@@ -7,7 +7,7 @@ Uses PyMuPDF (fitz) for speed and fidelity.
 from pathlib import Path
 from typing import List, Tuple
 from PIL import Image
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF
 from backend.app.processors.base import ParsedPage, RawDocumentElement
 from backend.app.core.config import settings
 from backend.app.core.logging import logger

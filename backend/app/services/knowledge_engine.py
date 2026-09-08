@@ -229,6 +229,15 @@ class KnowledgeEngine:
             if elem.type in ("figure", "chart", "image") and elem.id not in seen_element_ids:
                 seen_element_ids.add(elem.id)
                 raw_attrs = elem.content.raw_attributes or {}
+
+                # Skip micro-icons/emojis, duplicate visual instances, and recurring slide template logos
+                if (
+                    raw_attrs.get("is_decorative_noise")
+                    or raw_attrs.get("is_duplicate")
+                    or raw_attrs.get("is_recurring_template_asset")
+                ):
+                    continue
+
                 raw_val = raw_attrs.get("visual_analysis") or raw_attrs.get("description")
 
                 # Check for meme / informal graphic
@@ -274,9 +283,10 @@ class KnowledgeEngine:
     ) -> tuple[List[EntityItem], List[ClaimItem], List[RelationshipItem], List[KeyMetricItem], ContentStrategy]:
         """
         Attempts Qwen3-4B inference to perform reasoning; falls back gracefully to
-        deterministic semantic extraction if Qwen runtime is not active.
+        deterministic semantic extraction if Qwen runtime is not active or use_llm=False.
         """
-        if qwen_fusion_initializer.is_available():
+        use_llm = intent.extra.get("use_llm", True) if getattr(intent, "extra", None) else True
+        if use_llm and qwen_fusion_initializer.is_available():
             try:
                 return self._run_qwen3_reasoning(intent, evidence, tables, visuals, doc_title, semantic_doc)
             except Exception as e:
@@ -339,21 +349,41 @@ Context Passages:
         # Parse JSON from output
         json_match = re.search(r"\{.*\}", output_text, re.DOTALL)
         if json_match:
-            data = json.loads(json_match.group(0))
-            strategy = ContentStrategy(
-                headline_hook=data.get("headline_hook", f"Key Insights: {doc_title}"),
-                key_themes=data.get("key_themes", [intent.objective]),
-                suggested_structure=data.get("suggested_structure", ["Introduction", "Key Findings", "Conclusion"]),
-                recommended_cta=data.get("recommended_cta", "Explore the full findings."),
-                tone_guidelines=data.get("tone_guidelines", f"Adopt a {intent.tone.value} tone for {intent.audience.value} audience.")
-            )
-            claims = [ClaimItem(**c) for c in data.get("claims", [])]
-            metrics = [KeyMetricItem(**m) for m in data.get("metrics", [])]
+            try:
+                data = json.loads(json_match.group(0))
+                strategy = ContentStrategy(
+                    headline_hook=str(data.get("headline_hook", f"Key Insights: {doc_title}")),
+                    key_themes=data.get("key_themes", [intent.objective]),
+                    suggested_structure=data.get("suggested_structure", ["Introduction", "Key Findings", "Conclusion"]),
+                    recommended_cta=str(data.get("recommended_cta", "Explore the full findings.")),
+                    tone_guidelines=str(data.get("tone_guidelines", f"Adopt a {intent.tone.value} tone for {intent.audience.value} audience."))
+                )
+                claims = []
+                for idx, c in enumerate(data.get("claims", []), start=1):
+                    if isinstance(c, dict):
+                        claims.append(ClaimItem(
+                            id=str(c.get("id", f"claim_{idx}")),
+                            statement=str(c.get("statement", "")),
+                            source_element_ids=[str(s) for s in c.get("source_element_ids", [])],
+                            confidence=float(c.get("confidence", 0.9))
+                        ))
+                metrics = []
+                for m in data.get("metrics", []):
+                    if isinstance(m, dict):
+                        metrics.append(KeyMetricItem(
+                            label=str(m.get("label", "Metric")),
+                            value=str(m.get("value", "")),
+                            context=str(m.get("context", "")),
+                            source_element_id=m.get("source_element_id"),
+                            page=int(m.get("page")) if m.get("page") else None
+                        ))
 
-            # Merge with semantic_doc entities
-            entities = semantic_doc.entities or self._extract_entities_heuristic(evidence)
-            relationships = semantic_doc.relationships or []
-            return entities, claims, relationships, metrics, strategy
+                # Merge with semantic_doc entities
+                entities = semantic_doc.entities or self._extract_entities_heuristic(evidence)
+                relationships = semantic_doc.relationships or []
+                return entities, claims, relationships, metrics, strategy
+            except Exception as parse_err:
+                logger.warning("Qwen3-4B JSON parsing error (%s); falling back to deterministic extraction", parse_err)
 
         # If JSON parsing fails, fall back to deterministic
         return self._deterministic_extraction(intent, evidence, tables, visuals, doc_title, semantic_doc)

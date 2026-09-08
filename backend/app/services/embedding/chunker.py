@@ -238,7 +238,16 @@ class DocumentChunker:
     def _chunk_visual_element(self, elem: SemanticElement, doc_title: Optional[str]) -> List[ChunkItem]:
         """
         Chunks figure, chart, or image elements using caption, OCR text, and visual analysis.
+        Skips decorative icons, emojis, duplicate visuals, and recurring master template assets.
         """
+        raw_attrs = elem.content.raw_attributes or {}
+        if (
+            raw_attrs.get("is_decorative_noise")
+            or raw_attrs.get("is_duplicate")
+            or raw_attrs.get("is_recurring_template_asset")
+        ):
+            return []
+
         parts = []
         caption = elem.content.caption or ""
         ocr_text = elem.content.text or ""

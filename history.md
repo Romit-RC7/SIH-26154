@@ -1,5 +1,24 @@
 # SIH-26154 — Change History
 
+## Session 13 — 2026-09-08 — Document-Wide Visual Deduplication, Logo Filtering & Noise Suppression
+
+### What was done
+
+- **Implemented Visual Asset Deduplicator & Decorative Noise Filter Service**:
+  - `backend/app/services/recognition/image_deduplicator.py`: Built `VisualDeduplicator` service. Calculates 64-bit difference hashes (`dhash`) and exact byte hashes for visual crops. Filters micro-icons, bullet emojis, and thin line separators (< 48x48 px or area < 2304 px²), marking them as `is_decorative_noise`. Compares Hamming distance (`VISUAL_DHASH_THRESHOLD = 4`) to identify duplicate visual assets across PPTX slides, DOCX reports, PDFs, and HTML documents. Detects document-wide recurring master slide/header logos (`VISUAL_RECURRING_FREQ_THRESHOLD = 0.30`).
+- **Config Updates**:
+  - `backend/app/core/config.py`: Added `VISUAL_MIN_DIMENSION_PX` (`48`), `VISUAL_MIN_AREA_PX` (`2304`), `VISUAL_DHASH_THRESHOLD` (`4`), and `VISUAL_RECURRING_FREQ_THRESHOLD` (`0.30`).
+- **Specialist Vision & Pipeline Integration**:
+  - `backend/app/services/recognition/image_service.py`: Filtered out elements marked `is_decorative_noise` or `is_duplicate` prior to running Qwen2.5-VL inference. Added `_propagate_duplicate_analysis()` to automatically propagate `visual_analysis` attributes from primary elements to all duplicate elements in the document.
+  - `backend/app/services/recognition/coordinator.py`: Integrated `visual_deduplicator.process_elements()` into `recognize()` and `recognize_batch()`.
+- **Knowledge Engine & Vector Database Search Optimization**:
+  - `backend/app/services/embedding/chunker.py`: Skipped chunking and vector embedding generation for elements flagged as `is_decorative_noise`, `is_duplicate`, or `is_recurring_template_asset` to eliminate `pgvector` search noise and context bloat.
+  - `backend/app/services/knowledge_engine.py`: Skipped duplicate elements and recurring master logos in `_extract_visual_insights()` so prompt context is not wasted on repetitive slide headers.
+- **Added Comprehensive Test Suite**:
+  - `backend/tests/test_image_deduplicator.py`: Added unit tests verifying micro-icon detection, dHash perceptual similarity matching, 5-page recurring logo deduplication, and visual analysis attribute propagation.
+
+---
+
 ## Session 12 — 2026-09-08 — Refined Input Ingestion & Multimodal Graphic Processing
 
 ### What was done

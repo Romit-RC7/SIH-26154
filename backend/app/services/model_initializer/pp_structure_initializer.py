@@ -93,6 +93,11 @@ class PPStructureInitializer:
             "text_detection_model_dir": str(dirs["det"]),
             "text_recognition_model_name": "PP-OCRv4_server_rec",
             "text_recognition_model_dir": str(dirs["rec"]),
+            "doc_orientation_classify_model_name": "PP-LCNet_x1_0_doc_ori",
+            "doc_orientation_classify_model_dir": str(dirs["doc_ori"]),
+
+            "textline_orientation_model_name": "PP-LCNet_x1_0_textline_ori",
+            "textline_orientation_model_dir": str(dirs["textline_ori"]),
         }
 
         chart_dir = dirs["chart"]
@@ -115,18 +120,7 @@ class PPStructureInitializer:
         else:
             logger.warning("PP-Structure chart model is not complete: %s", chart_dir)
 
-        if (dirs["doc_ori"] / "inference.yml").exists():
-            kwargs.update(
-                doc_orientation_model_name="PP-LCNet_x1_0_doc_ori",
-                doc_orientation_model_dir=str(dirs["doc_ori"]),
-                doc_orientation_classify_model_name="PP-LCNet_x1_0_doc_ori",
-                doc_orientation_classify_model_dir=str(dirs["doc_ori"]),
-            )
-        if (dirs["textline_ori"] / "inference.yml").exists():
-            kwargs.update(
-                textline_orientation_model_name="PP-LCNet_x1_0_textline_ori",
-                textline_orientation_model_dir=str(dirs["textline_ori"]),
-            )
+
 
         logger.info("Loading offline PP-StructureV3 models from %s", self.models_root)
         self.engine = PPStructureV3(**kwargs)

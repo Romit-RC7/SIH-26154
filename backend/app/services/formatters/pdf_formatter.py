@@ -112,7 +112,7 @@ class PdfFormatter:
 
         # 2. PyMuPDF (fitz) fallback canvas renderer
         try:
-            import fitz
+            import pymupdf as fitz
 
             pdf_doc = fitz.open()
             page = pdf_doc.new_page(width=612, height=792)  # Letter size

@@ -191,9 +191,11 @@ async def search_knowledge_query(
 )
 async def assemble_knowledge_by_id(
     document_id: str = Path(..., description="Target document ID"),
-    req: AssembleRequest = Body(default_factory=AssembleRequest),
+    req: Optional[AssembleRequest] = Body(None),
     db: AsyncSession = Depends(get_db)
 ):
+    if req is None:
+        req = AssembleRequest()
     clean_doc_id = document_id.strip()
     intent = IntentAndPersonalization(
         document_id=clean_doc_id,
@@ -204,7 +206,8 @@ async def assemble_knowledge_by_id(
         objective=req.objective,
         detail_level=req.detail_level,
         focus_keywords=req.focus_keywords,
-        custom_instructions=req.custom_instructions
+        custom_instructions=req.custom_instructions,
+        extra={"use_llm": req.use_llm}
     )
     return await _execute_assemble(intent, db)
 
@@ -234,16 +237,20 @@ async def _execute_assemble(intent: IntentAndPersonalization, db: AsyncSession) 
         )
 
     # Automatically trigger embedding if not already embedded
-    chunk_check = await db.execute(
-        select(DocumentChunk).where(DocumentChunk.document_id == clean_doc_id).limit(1)
-    )
-    if not chunk_check.scalar_one_or_none() and doc.semantic_json:
-        semantic_doc = SemanticDocument.model_validate(doc.semantic_json)
-        await embedding_service.embed_and_store_document(
-            document_id=clean_doc_id,
-            semantic_doc=semantic_doc,
-            db=db
+    try:
+        chunk_check = await db.execute(
+            select(DocumentChunk).where(DocumentChunk.document_id == clean_doc_id).limit(1)
         )
+        if not chunk_check.scalar_one_or_none() and doc.semantic_json:
+            semantic_doc = SemanticDocument.model_validate(doc.semantic_json)
+            await embedding_service.embed_and_store_document(
+                document_id=clean_doc_id,
+                semantic_doc=semantic_doc,
+                db=db
+            )
+    except Exception as exc:
+        from backend.app.core.logging import logger
+        logger.warning("Auto-embedding failed for document %s during assembly: %s; proceeding with fallback chunks", clean_doc_id, exc)
 
     package = await knowledge_engine.assemble_knowledge(
         intent=intent,

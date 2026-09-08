@@ -6,7 +6,7 @@ geometry and heuristics when PaddleOCR is initializing or unavailable.
 
 from typing import Any, Dict, List, Optional
 from PIL import Image
-import fitz
+import pymupdf as fitz
 from backend.app.processors.base import BaseStructureAnalyzer, RawDocumentElement
 from backend.app.core.logging import logger
 
