@@ -1,5 +1,16 @@
 # SIH-26154 — Change History
 
+## Session 11 — 2026-09-08 — Video Keyframe Sampling Optimization & Frame-Diff Filtering
+
+### What was done
+
+- **Implemented Frame-Diff Keyframe Sampling Optimization**:
+  - `backend/app/core/config.py`: Added `VIDEO_FRAME_DIFF_THRESHOLD` (`0.03` / 3% pixel change threshold), `VIDEO_MAX_KEYFRAMES` (`20` hard cap), and `VIDEO_CANDIDATE_FPS` (`0.333` fps / ~3s sampling interval).
+  - `backend/app/processors/video_parser.py`: Upgraded video frame extraction with low-resolution (320x180) NumPy mean normalized pixel-difference thresholding. Drops static or near-identical duplicate frames while capturing all visual slide/scene transitions. Enforces a maximum keyframe cap (`VIDEO_MAX_KEYFRAMES: 20`) to bound downstream Qwen2.5-VL inference time.
+  - `backend/tests/test_video_parser.py`: Added unit tests for frame difference calculations (identical, distinct, and partial changes) and timestamp sampling.
+
+---
+
 ## Session 10 — 2026-09-08 — Trust & Validation Layer (Stage 5) and Multi-Format Export Builders (Stage 6)
 
 ### What was done

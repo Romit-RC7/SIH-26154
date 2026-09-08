@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     VIDEO_FRAME_SAMPLE_RATE_PER_MINUTE: int = 6
     VIDEO_FRAME_MAX_WIDTH: int = 1280
     VIDEO_MAX_DURATION_SECONDS: int = 120
+    VIDEO_FRAME_DIFF_THRESHOLD: float = 0.03  # 3% average pixel difference threshold
+    VIDEO_MAX_KEYFRAMES: int = 20              # Maximum keyframes to pass to visual recognition
+    VIDEO_CANDIDATE_FPS: float = 0.333         # Sample candidate frames every ~3 seconds (fps=1/3)
     FASTER_WHISPER_DEVICE: str = "cuda"
     FASTER_WHISPER_COMPUTE_TYPE: str = "float16"
     USE_GPU: bool = True

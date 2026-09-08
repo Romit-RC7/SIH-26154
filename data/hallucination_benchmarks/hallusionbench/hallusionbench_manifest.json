@@ -1,0 +1,402 @@
+[
+  {
+    "sample_id": 1,
+    "figure_id": "fig_2",
+    "question": "Control Q1: Does the diagram show an upward trend in Q2?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_2.png"
+  },
+  {
+    "sample_id": 2,
+    "figure_id": "fig_3",
+    "question": "Control Q2: Does the diagram show an upward trend in Q3?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_3.png"
+  },
+  {
+    "sample_id": 3,
+    "figure_id": "fig_4",
+    "question": "Control Q3: Does the diagram show an upward trend in Q4?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_4.png"
+  },
+  {
+    "sample_id": 4,
+    "figure_id": "fig_5",
+    "question": "Control Q4: Does the diagram show an upward trend in Q1?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_5.png"
+  },
+  {
+    "sample_id": 5,
+    "figure_id": "fig_6",
+    "question": "Control Q5: Does the diagram show an upward trend in Q2?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_6.png"
+  },
+  {
+    "sample_id": 6,
+    "figure_id": "fig_7",
+    "question": "Control Q6: Does the diagram show an upward trend in Q3?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_7.png"
+  },
+  {
+    "sample_id": 7,
+    "figure_id": "fig_8",
+    "question": "Control Q7: Does the diagram show an upward trend in Q4?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_8.png"
+  },
+  {
+    "sample_id": 8,
+    "figure_id": "fig_9",
+    "question": "Control Q8: Does the diagram show an upward trend in Q1?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_9.png"
+  },
+  {
+    "sample_id": 9,
+    "figure_id": "fig_10",
+    "question": "Control Q9: Does the diagram show an upward trend in Q2?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_10.png"
+  },
+  {
+    "sample_id": 10,
+    "figure_id": "fig_11",
+    "question": "Control Q10: Does the diagram show an upward trend in Q3?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_11.png"
+  },
+  {
+    "sample_id": 11,
+    "figure_id": "fig_12",
+    "question": "Control Q11: Does the diagram show an upward trend in Q4?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_12.png"
+  },
+  {
+    "sample_id": 12,
+    "figure_id": "fig_13",
+    "question": "Control Q12: Does the diagram show an upward trend in Q1?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_13.png"
+  },
+  {
+    "sample_id": 13,
+    "figure_id": "fig_14",
+    "question": "Control Q13: Does the diagram show an upward trend in Q2?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_14.png"
+  },
+  {
+    "sample_id": 14,
+    "figure_id": "fig_15",
+    "question": "Control Q14: Does the diagram show an upward trend in Q3?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_15.png"
+  },
+  {
+    "sample_id": 15,
+    "figure_id": "fig_1",
+    "question": "Control Q15: Does the diagram show an upward trend in Q4?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_1.png"
+  },
+  {
+    "sample_id": 16,
+    "figure_id": "fig_2",
+    "question": "Control Q16: Does the diagram show an upward trend in Q1?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_2.png"
+  },
+  {
+    "sample_id": 17,
+    "figure_id": "fig_3",
+    "question": "Control Q17: Does the diagram show an upward trend in Q2?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_3.png"
+  },
+  {
+    "sample_id": 18,
+    "figure_id": "fig_4",
+    "question": "Control Q18: Does the diagram show an upward trend in Q3?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_4.png"
+  },
+  {
+    "sample_id": 19,
+    "figure_id": "fig_5",
+    "question": "Control Q19: Does the diagram show an upward trend in Q4?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_5.png"
+  },
+  {
+    "sample_id": 20,
+    "figure_id": "fig_6",
+    "question": "Control Q20: Does the diagram show an upward trend in Q1?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_6.png"
+  },
+  {
+    "sample_id": 21,
+    "figure_id": "fig_7",
+    "question": "Control Q21: Does the diagram show an upward trend in Q2?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_7.png"
+  },
+  {
+    "sample_id": 22,
+    "figure_id": "fig_8",
+    "question": "Control Q22: Does the diagram show an upward trend in Q3?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_8.png"
+  },
+  {
+    "sample_id": 23,
+    "figure_id": "fig_9",
+    "question": "Control Q23: Does the diagram show an upward trend in Q4?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_9.png"
+  },
+  {
+    "sample_id": 24,
+    "figure_id": "fig_10",
+    "question": "Control Q24: Does the diagram show an upward trend in Q1?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_10.png"
+  },
+  {
+    "sample_id": 25,
+    "figure_id": "fig_11",
+    "question": "Control Q25: Does the diagram show an upward trend in Q2?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_11.png"
+  },
+  {
+    "sample_id": 26,
+    "figure_id": "fig_12",
+    "question": "Control Q26: Does the diagram show an upward trend in Q3?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_12.png"
+  },
+  {
+    "sample_id": 27,
+    "figure_id": "fig_13",
+    "question": "Control Q27: Does the diagram show an upward trend in Q4?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_13.png"
+  },
+  {
+    "sample_id": 28,
+    "figure_id": "fig_14",
+    "question": "Control Q28: Does the diagram show an upward trend in Q1?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_14.png"
+  },
+  {
+    "sample_id": 29,
+    "figure_id": "fig_15",
+    "question": "Control Q29: Does the diagram show an upward trend in Q2?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_15.png"
+  },
+  {
+    "sample_id": 30,
+    "figure_id": "fig_1",
+    "question": "Control Q30: Does the diagram show an upward trend in Q3?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_1.png"
+  },
+  {
+    "sample_id": 31,
+    "figure_id": "fig_2",
+    "question": "Control Q31: Does the diagram show an upward trend in Q4?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_2.png"
+  },
+  {
+    "sample_id": 32,
+    "figure_id": "fig_3",
+    "question": "Control Q32: Does the diagram show an upward trend in Q1?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_3.png"
+  },
+  {
+    "sample_id": 33,
+    "figure_id": "fig_4",
+    "question": "Control Q33: Does the diagram show an upward trend in Q2?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_4.png"
+  },
+  {
+    "sample_id": 34,
+    "figure_id": "fig_5",
+    "question": "Control Q34: Does the diagram show an upward trend in Q3?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_5.png"
+  },
+  {
+    "sample_id": 35,
+    "figure_id": "fig_6",
+    "question": "Control Q35: Does the diagram show an upward trend in Q4?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_6.png"
+  },
+  {
+    "sample_id": 36,
+    "figure_id": "fig_7",
+    "question": "Control Q36: Does the diagram show an upward trend in Q1?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_7.png"
+  },
+  {
+    "sample_id": 37,
+    "figure_id": "fig_8",
+    "question": "Control Q37: Does the diagram show an upward trend in Q2?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_8.png"
+  },
+  {
+    "sample_id": 38,
+    "figure_id": "fig_9",
+    "question": "Control Q38: Does the diagram show an upward trend in Q3?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_9.png"
+  },
+  {
+    "sample_id": 39,
+    "figure_id": "fig_10",
+    "question": "Control Q39: Does the diagram show an upward trend in Q4?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_10.png"
+  },
+  {
+    "sample_id": 40,
+    "figure_id": "fig_11",
+    "question": "Control Q40: Does the diagram show an upward trend in Q1?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_11.png"
+  },
+  {
+    "sample_id": 41,
+    "figure_id": "fig_12",
+    "question": "Control Q41: Does the diagram show an upward trend in Q2?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_12.png"
+  },
+  {
+    "sample_id": 42,
+    "figure_id": "fig_13",
+    "question": "Control Q42: Does the diagram show an upward trend in Q3?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_13.png"
+  },
+  {
+    "sample_id": 43,
+    "figure_id": "fig_14",
+    "question": "Control Q43: Does the diagram show an upward trend in Q4?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_14.png"
+  },
+  {
+    "sample_id": 44,
+    "figure_id": "fig_15",
+    "question": "Control Q44: Does the diagram show an upward trend in Q1?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_15.png"
+  },
+  {
+    "sample_id": 45,
+    "figure_id": "fig_1",
+    "question": "Control Q45: Does the diagram show an upward trend in Q2?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_1.png"
+  },
+  {
+    "sample_id": 46,
+    "figure_id": "fig_2",
+    "question": "Control Q46: Does the diagram show an upward trend in Q3?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_2.png"
+  },
+  {
+    "sample_id": 47,
+    "figure_id": "fig_3",
+    "question": "Control Q47: Does the diagram show an upward trend in Q4?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_3.png"
+  },
+  {
+    "sample_id": 48,
+    "figure_id": "fig_4",
+    "question": "Control Q48: Does the diagram show an upward trend in Q1?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_4.png"
+  },
+  {
+    "sample_id": 49,
+    "figure_id": "fig_5",
+    "question": "Control Q49: Does the diagram show an upward trend in Q2?",
+    "gt_answer": "yes",
+    "visual_control_type": "vd",
+    "image_path": "uploads/extracted/fig_5.png"
+  },
+  {
+    "sample_id": 50,
+    "figure_id": "fig_6",
+    "question": "Control Q50: Does the diagram show an upward trend in Q3?",
+    "gt_answer": "no",
+    "visual_control_type": "lp",
+    "image_path": "uploads/extracted/fig_6.png"
+  }
+]

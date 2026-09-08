@@ -1,3 +1,5 @@
+
+
 # syntax=docker/dockerfile:1.7
 # Multi-stage Dockerfile for SIH-26154 Semantic Document Processing System
 # Base Python 3.12 runtime with C++ runtime, Poppler, OpenCV, and PaddleOCR dependencies
@@ -38,9 +40,10 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --default-timeout=1000 --retries 5 uv
 
 # Install Python packages with uv (significantly faster)
+# Increased UV_HTTP_TIMEOUT to 300s to handle large CUDA/torch package downloads (400MB+)
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system -r requirements.txt && \
-    uv pip install --system \
+    UV_HTTP_TIMEOUT=300 uv pip install --system -r requirements.txt && \
+    UV_HTTP_TIMEOUT=300 uv pip install --system \
     paddlepaddle==3.0.0 paddleocr==3.7.0 "paddlex[ocr,multimodal]>=3.7.0,<3.8.0"
 
 # Copy application source code

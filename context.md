@@ -7,6 +7,45 @@
 
 ---
 
+## 0. Problem Statement (SIH-26154)
+
+### Background
+
+Organisations frequently need to convert information available in different forms such as news articles, reports, advisories, threat intelligence, policy documents, research papers, announcements, incident reports or free-form prompts into specific communication artefacts suitable for various purposes. The process of manually analysing the source content, understanding the desired objective and creating the required output format is time-consuming, resource-intensive and often requires expertise in content creation, communication and domain knowledge.
+
+There is a need for an intelligent platform that can transform user-provided content into a desired output format through a simple and configurable interface.
+
+### Description
+
+The system shall act as an AI-powered content transformation engine that converts a common source of information into the specific deliverable requested by the operator, thereby reducing manual effort, improving consistency, accelerating content creation and enhancing operational efficiency.
+
+The platform shall provide a dashboard through which an operator can submit source content in the form of high quality English language text, documents, articles, reports, prompts, images, videos or contextual information. In addition to providing the source content, the operator shall select one or more desired output types through configurable parameters available on the dashboard.
+
+Based on the submitted content and the selected output type(s), the platform shall analyze the input, understand the context and intent, and generate the requested output artefact. The platform should support multiple output formats and allow operators to control generation parameters such as target audience, tone, language, level of detail, communication objective and content style.
+
+In summary, platform shall generate output corresponding to the option(s) selected by the operator on the dashboard.
+
+### Examples
+
+- If **Video** is selected, generate a complete video package including script, storyboard, scene descriptions, narration text, subtitles and visual recommendations.
+- If **LinkedIn Post** is selected, generate a professional LinkedIn post suitable for publication.
+- If **Twitter/X Post** is selected, generate platform-optimized tweets or tweet threads.
+- If **Advisory** is selected, generate a structured advisory document.
+- If **Infographic** is selected, generate infographic content, layout recommendations and key messaging.
+- If **Executive Summary** is selected, generate a concise executive briefing.
+- If **Presentation** is selected, generate presentation slides and speaker notes.
+- If multiple output formats are selected, generate all selected deliverables from the same source content.
+
+### Expected Deliverables for Evaluation
+
+- Source Code Link (GitHub/Drive Link)
+- Readme with Setup Instructions
+- Architecture Document (Max 2 Pages)
+- Demo Video (Max 2 Minutes)
+- Technical Presentation (Max 5 Slides)
+
+---
+
 ## 1. System Overview & Architecture
 
 The **SIH-26154 AI-Powered Content Transformation Platform** ingests unstructured, multi-page documents (**PDF**, **DOCX**, **PPTX**, **Images**, and **Video MP4**) and converts them into customizable, multi-format communication deliverables.
@@ -47,7 +86,7 @@ Document / Video Ingestion
 
 ---
 
-## 2. Staged Model Residency & Hardware Allocation
+## 3. Staged Model Residency & Hardware Allocation
 
 All AI weights run locally offline after staging in `models/`:
 
@@ -63,7 +102,7 @@ All AI weights run locally offline after staging in `models/`:
 
 ---
 
-## 3. Codebase Inventory
+## 4. Codebase Inventory
 
 ```
 backend/
@@ -148,7 +187,7 @@ backend/
 
 ---
 
-## 4. Verification & Status
+## 5. Verification & Status
 
 - **Unit & Integration Tests**: All test suites passing.
 - **REST Endpoints**: 15 endpoints exposed with interactive Swagger UI.

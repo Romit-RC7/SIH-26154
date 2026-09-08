@@ -1,0 +1,20 @@
+[
+  {
+    "sample_id": 1,
+    "image_path": "uploads\\extracted\\5b61c2f7-e697-4545-9cd4-fb1306f3d2ec\\elem_5b61c2f7_1_2.png",
+    "question": "Identify the primary visual element, chart type, and visible text labels in this figure.",
+    "expected_category": "figure_diagram"
+  },
+  {
+    "sample_id": 2,
+    "image_path": "uploads\\extracted\\5b61c2f7-e697-4545-9cd4-fb1306f3d2ec\\elem_5b61c2f7_2_3.png",
+    "question": "Identify the primary visual element, chart type, and visible text labels in this figure.",
+    "expected_category": "figure_diagram"
+  },
+  {
+    "sample_id": 3,
+    "image_path": "uploads\\extracted\\5b61c2f7-e697-4545-9cd4-fb1306f3d2ec\\elem_5b61c2f7_3_4.png",
+    "question": "Identify the primary visual element, chart type, and visible text labels in this figure.",
+    "expected_category": "figure_diagram"
+  }
+]
