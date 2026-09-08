@@ -6,7 +6,7 @@ providing robust sanitization and graceful schema fallbacks.
 
 import json
 import re
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 from backend.app.core.logging import logger
 from backend.app.schemas.intent import OutputType
 from backend.app.schemas.generated_artefact import (

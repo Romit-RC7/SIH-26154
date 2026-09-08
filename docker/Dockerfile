@@ -1,3 +1,5 @@
+
+
 # syntax=docker/dockerfile:1.7
 # Multi-stage Dockerfile for SIH-26154 Semantic Document Processing System
 # Base Python 3.12 runtime with C++ runtime, Poppler, OpenCV, and PaddleOCR dependencies

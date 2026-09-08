@@ -79,29 +79,54 @@ class ImageRecognitionService:
             if ocr_text else ""
         )
         prompt = (
-            f"Analyze {subject} precisely based strictly on what is directly visible.\n"
-            "CRITICAL RULES:\n"
-            "1. Identify the actual visual category in a short label (e.g. 'person', 'natural_scenery', 'document', 'illustration', 'screenshot', 'diagram', 'chart').\n"
-            "2. Describe ONLY what is directly visible in THIS specific frame. Do NOT invent or repeat generic stock descriptions.\n"
-            "3. Transcribe only labels, titles, or numbers that are visibly present.\n"
-            "4. If text is absent, use an empty visible_text list.\n"
+            f"Inspect {subject} using ONLY the pixels visible in the provided image.\n\n"
+            "STRICT VISUAL GROUNDING RULES:\n"
+            "1. First determine what is actually visible in this specific image. "
+            "Do not guess what the image might represent from context or prior knowledge.\n"
+            "2. Identify the visual type conservatively. Choose the simplest accurate category "
+            "such as: person, natural_scenery, photograph, illustration, screenshot, diagram, "
+            "flowchart, technical_drawing, scientific_figure, chart, document, map, or other.\n"
+            "3. Describe ONLY objects, shapes, structures, people, text, and relationships that "
+            "are directly visible. Never invent details to make the description more complete.\n"
+            "4. If an object or detail is unclear, cropped, too small, or not visibly supported, "
+            "DO NOT identify or guess it.\n"
+            "5. Do not infer hidden context, location, purpose, identity, profession, software, "
+            "technology, materials, events, or causes unless they are explicitly visible.\n"
+            "6. Do not use generic descriptions learned from similar images. The description "
+            "must refer to THIS exact image.\n"
+            "7. For visible_text, include ONLY text that can actually be read in the image. "
+            "Never invent text. If no text is clearly readable, return an empty list.\n"
+            "8. For key_details, include only concrete visual characteristics that can be "
+            "verified directly from the image.\n"
+            "9. If the image does not contain enough information to answer something, leave it "
+            "out rather than guessing.\n"
+            "10. Before answering, internally check every claim: "
+            "\"Can I point to visible evidence for this claim in this image?\" "
+            "If not, remove the claim.\n\n"
             f"{ocr_evidence}\n"
-            "Respond ONLY with a valid JSON object matching this schema:\n"
+            "Return ONLY a valid JSON object. Do not include markdown, explanations, or text "
+            "outside the JSON.\n\n"
+            "Schema:\n"
             "{\n"
-            '  "visual_type": "<detected category>",\n'
-            '  "description": "<objective description of visible content in this frame>",\n'
-            '  "visible_text": ["<extracted text/labels if present>"],\n'
-            '  "key_details": ["<key visual characteristics>"]\n'
+            '  "visual_type": "<single conservative category>",\n'
+            '  "description": "<short objective description containing only directly visible information>",\n'
+            '  "visible_text": ["<only clearly readable text>"],\n'
+            '  "key_details": ["<only directly observable visual details>"]\n'
             "}"
         )
+        
         try:
             response = model.create_chat_completion(
                 messages=[
                     {
                         "role": "system",
                         "content": (
-                            "You are a precise computer vision system. Describe strictly what is "
-                            "directly visible in the image. Never invent unmentioned objects or repeat stock templates."
+                            "You are a conservative visual inspection system. "
+                            "Your job is to report only evidence directly visible in the supplied image. "
+                            "Never guess, infer, complete, or embellish missing visual information. "
+                            "When uncertain, omit the claim rather than guessing. "
+                            "Do not rely on generic descriptions of similar images. "
+                            "Every statement in the output must be supported by visible pixels in THIS image."
                         ),
                     },
                     {
