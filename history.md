@@ -1,5 +1,32 @@
 # SIH-26154 — Change History
 
+## Session 12 — 2026-09-08 — Refined Input Ingestion & Multimodal Graphic Processing
+
+### What was done
+
+- **Implemented Source Text & Prompt Ingestion Guardrail Service**:
+  - `backend/app/services/input_validator.py`: Built `SourceInputValidator` and `ValidationResult`. Enforces minimum bounds (5 words, 30 characters), conversational greeting and typo fuzzy matching using `difflib` (rejecting pleasantries and misspellings such as "good gorming", "goood morning", "helo"), gibberish keyboard mash detection (5+ consonant clusters e.g. "asdfghjkl", vowel deficiency), repeated character and repetitive word spam filtering, and classification between `RAW_ARTICLE` and `FREEFORM_PROMPT` modes.
+- **Implemented Text Document Parser**:
+  - `backend/app/processors/text_parser.py`: Built `TextParser` to segment raw text inputs and `.txt` files into `ParsedPage` and `RawDocumentElement` objects, preserving markdown headers, paragraph reading orders, and input mode telemetry.
+- **Extended Extractor & Storage Integration**:
+  - `backend/app/core/config.py`: Added `.txt` to `ALLOWED_EXTENSIONS`.
+  - `backend/app/processors/extractor.py`: Added `_extract_text()` to route `.txt` files through `text_parser.parse()`.
+  - `backend/app/services/storage_service.py`: Added `save_text_content()` for raw UTF-8 persistence into `uploads/raw/{document_id}.txt`.
+- **Exposed Direct Text Ingestion REST API Endpoint**:
+  - `backend/app/schemas/document.py`: Added `TextSubmissionRequest` schema with `text` and optional `title`.
+  - `backend/app/api/v1/endpoints/documents.py`: Added `POST /api/v1/documents/text`. Runs guardrail validation, creates `Document` and `ProcessingJob` database records, enqueues background processing, and returns `DocumentUploadResponse`.
+- **Enhanced Multimodal Meme & Informal Graphic Visual Intelligence**:
+  - `backend/app/services/recognition/image_service.py`: Updated Qwen2.5-VL prompt schema to include `meme` and `social_media_graphic` taxonomy, extract overlay OCR text into `overlay_text`, and identify underlying technical or humor themes in `core_concept_or_humor_theme`. Populates element attributes (`is_informal_graphic`, `overlay_text`, `core_concept`).
+  - `backend/app/services/knowledge_engine.py`: Enhanced `_extract_visual_insights()` to format meme takeaways as `"Informal Graphic/Meme Overlay Text: '{overlay_text}'. Core Theme: {core_concept}"` so Stage 4 Content Orchestrator can translate informal tech memes into professional advisories and briefings.
+  - `backend/app/services/validation/fact_checker.py`: Filtered out irrelevant visuals (`selfie`, `unrelated`, `irrelevant`) from the grounding evidence pool to prevent false evidence matching. Used `bge_initializer.encode` wrapper for robust cosine grounding.
+- **Added Comprehensive Test Suites (21 new tests, 36/36 passing across entire test suite)**:
+  - `backend/tests/test_input_validator.py`: Tests length bounds, greeting typos ("good gorming"), gibberish clusters, articles, and prompts.
+  - `backend/tests/test_text_parser.py`: Tests raw text segmentation, markdown headers, and `.txt` file parsing.
+  - `backend/tests/test_text_ingest_api.py`: Tests `POST /api/v1/documents/text` success and 400 error guardrail rejections.
+  - `backend/tests/test_meme_recognition.py`: Tests Qwen2.5-VL meme payload parsing, Knowledge Engine insight formatting, and fact-checker visual filtering.
+
+---
+
 ## Session 11 — 2026-09-08 — Video Keyframe Sampling Optimization & Frame-Diff Filtering
 
 ### What was done

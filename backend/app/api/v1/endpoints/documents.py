@@ -22,10 +22,12 @@ from backend.app.schemas.document import (
     DocumentDetail,
     DocumentSummary,
     DocumentListResponse,
+    TextSubmissionRequest,
 )
 from backend.app.schemas.semantic_document import SemanticDocument
 from backend.app.services.storage_service import storage_service
 from backend.app.services.pipeline_service import pipeline_service
+from backend.app.services.input_validator import source_input_validator
 from backend.app.utils.file_utils import validate_upload_filename, detect_mime_type
 from backend.app.processors.video_parser import video_parser
 
@@ -139,6 +141,107 @@ async def upload_document(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Upload failed: {str(exc)}"
+        )
+
+
+@router.post(
+    "/text",
+    tags=["Documents"],
+    response_model=DocumentUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Direct Text & Prompt Ingestion",
+    description=(
+        "Ingests direct article text, threat advisories, policy excerpts, or free-form task prompts "
+        "without requiring a file upload. Runs input validation guardrails against greetings, typos "
+        "(e.g., 'good gorming'), and gibberish, then enqueues the text into the semantic processing pipeline."
+    ),
+)
+async def ingest_text(
+    payload: TextSubmissionRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. Guardrail input validation
+    val_res = source_input_validator.validate_source_text(payload.text)
+    if not val_res.is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "Input validation failed",
+                "errors": val_res.errors,
+                "detected_mode": val_res.detected_mode,
+                "word_count": val_res.word_count,
+                "char_count": val_res.char_count,
+            }
+        )
+
+    document_id = str(uuid.uuid4())
+    job_id = str(uuid.uuid4())
+
+    try:
+        # 2. Persist text to storage as UTF-8 file
+        target_path = storage_service.save_text_content(val_res.cleaned_text, document_id)
+        file_size = target_path.stat().st_size
+
+        doc_title = payload.title.strip() if payload.title and payload.title.strip() else f"text_input_{document_id[:8]}"
+        display_filename = f"{doc_title}.txt"
+
+        # 3. Create Document DB record
+        doc = Document(
+            id=document_id,
+            filename=display_filename,
+            stored_path=str(target_path),
+            file_size=file_size,
+            mime_type="text/plain",
+            page_count=0,
+            status=DocumentStatus.PENDING,
+            processing_metadata={
+                "input_mode": val_res.detected_mode,
+                "word_count": val_res.word_count,
+                "char_count": val_res.char_count,
+                "title": payload.title,
+                "direct_text_ingest": True,
+            }
+        )
+        db.add(doc)
+
+        # 4. Create ProcessingJob DB record
+        job = ProcessingJob(
+            id=job_id,
+            document_id=document_id,
+            status=JobStatus.QUEUED,
+            step=PipelineStep.INIT,
+            processing_metadata={
+                "upload_filename": display_filename,
+                "input_mode": val_res.detected_mode,
+            }
+        )
+        db.add(job)
+
+        await db.commit()
+        await db.refresh(doc)
+
+        # 5. Enqueue background pipeline processing
+        background_tasks.add_task(pipeline_service.enqueue_job, document_id, job_id)
+
+        logger.info(f"Enqueued text document {document_id} for processing (job: {job_id}, mode: {val_res.detected_mode})")
+
+        return DocumentUploadResponse(
+            message=f"Text accepted ({val_res.detected_mode}) and enqueued for semantic processing",
+            document_id=document_id,
+            job_id=job_id,
+            status=doc.status,
+            filename=doc.filename
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(f"Unexpected error during text ingestion: {exc}")
+        storage_service.delete_document_artifacts(document_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Text ingestion failed: {str(exc)}"
         )
 
 

@@ -52,3 +52,9 @@ class DocumentListResponse(BaseModel):
     skip: int
     limit: int
     items: List[DocumentSummary]
+
+
+class TextSubmissionRequest(BaseModel):
+    text: str = Field(..., description="Raw article text, report, or free-form task prompt")
+    title: Optional[str] = Field(None, description="Optional title or headline for the submitted text")
+

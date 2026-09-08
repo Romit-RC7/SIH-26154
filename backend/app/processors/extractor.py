@@ -18,6 +18,7 @@ from backend.app.core.logging import logger
 from backend.app.processors.ppt_parser import ppt_parser
 from backend.app.processors.image_parser import image_parser
 from backend.app.processors.video_parser import video_parser
+from backend.app.processors.text_parser import text_parser
 import fitz
 
 
@@ -40,8 +41,8 @@ class DocumentExtractor:
             return self._extract_pdf(file_path, document_id, run_specialist_recognition, unload_structure)
         elif extension == ".docx":
             return self._extract_docx(file_path, document_id, run_specialist_recognition, unload_structure)
-            return self._extract_docx(file_path, document_id)
-
+        elif extension == ".txt":
+            return self._extract_text(file_path, document_id, run_specialist_recognition, unload_structure)
         elif extension == ".pptx":
             return self._extract_pptx(file_path, document_id, run_specialist_recognition, unload_structure)
 
@@ -258,6 +259,30 @@ class DocumentExtractor:
             recognition_coordinator.recognize(processed)
         meta["extracted_elements_count"] = len(processed)
 
+        return processed, meta
+
+    def _extract_text(
+        self,
+        file_path: Path,
+        document_id: str,
+        run_specialist_recognition: bool = True,
+        unload_structure: bool = True,
+    ) -> Tuple[List[RawDocumentElement], dict]:
+        """Process plain text files."""
+        _, raw_elements, meta = text_parser.parse(file_path)
+        processed: List[RawDocumentElement] = []
+
+        for idx, elem in enumerate(raw_elements):
+            element_id = f"elem_{document_id[:8]}_{elem.page}_{idx + 1}"
+            elem.attributes["element_id"] = element_id
+            processed.append(elem)
+
+        if unload_structure:
+            pp_structure_analyzer.unload()
+        if run_specialist_recognition:
+            recognition_coordinator.recognize(processed)
+
+        meta["extracted_elements_count"] = len(processed)
         return processed, meta
 
     def _extract_video(

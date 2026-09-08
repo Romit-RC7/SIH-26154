@@ -42,6 +42,5 @@ models/
 *.bin
 *.onnx
 
-scripts/
-*.py
+scripts/benchmark_vlms.py
 

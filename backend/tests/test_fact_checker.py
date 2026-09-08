@@ -71,10 +71,17 @@ def test_trust_service_validation(mock_kp_for_trust: KnowledgePackage):
         document_id="doc_trust_1",
         output_type=OutputType.LINKEDIN_POST,
         content={
-            "hook": "Critical router security advisory for network operators.",
-            "body": "Zero-day router vulnerability detected. Immediate patch deployment is required.",
-            "cta": "Upgrade router firmware immediately.",
-            "hashtags": ["#Security", "#Network"]
+            "hook": "Critical router security advisory for network operators across global financial infrastructure.",
+            "body": (
+                "A critical zero-day vulnerability has been detected across enterprise router hardware globally. "
+                "Immediate patch deployment is required to mitigate potential remote code execution threats. "
+                "Network administrators should verify that firmware updates are systematically applied to all border routers. "
+                "Security teams must monitor network traffic logs for anomalous inbound connections and enforce perimeter isolation. "
+                "Following manufacturer recommendations, backup configuration profiles must be archived securely before installing hotfixes. "
+                "Our telemetry confirms that deployed patches successfully reduced attack incidence by 98 percent."
+            ),
+            "cta": "Upgrade router firmware immediately to maintain network integrity.",
+            "hashtags": ["#Security", "#Network", "#CyberDefense"]
         }
     )
 

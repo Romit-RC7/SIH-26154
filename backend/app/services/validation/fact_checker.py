@@ -34,9 +34,20 @@ class FactChecker:
             logger.info("No text statements found for factuality verification in artefact %s", artefact.artefact_id)
             return 1.0, True, []
 
+        # Collect grounded evidence texts, excluding irrelevant/non-grounding visual assets
         evidence_texts = [item.text for item in kp.retrieved_evidence]
-        if not evidence_texts and kp.orchestrator_prompt_context:
-            evidence_texts = [kp.orchestrator_prompt_context]
+
+        # Include valid visual insight takeaways (memes, charts, diagrams), filtering irrelevant graphics
+        irrelevant_keywords = {"unrelated", "irrelevant", "selfie", "random_graphic"}
+        for vis in getattr(kp, "visual_insights", []):
+            takeaway_lower = vis.takeaway.lower()
+            if any(irr in takeaway_lower for irr in irrelevant_keywords):
+                logger.info("Excluding irrelevant visual insight %s from grounding evidence", vis.element_id)
+                continue
+            evidence_texts.append(f"Visual Insight: {vis.takeaway}")
+
+        if kp.orchestrator_prompt_context and kp.orchestrator_prompt_context not in evidence_texts:
+            evidence_texts.append(kp.orchestrator_prompt_context)
 
         verifications: List[ClaimVerification] = []
         grounded_count = 0
@@ -108,17 +119,17 @@ class FactChecker:
         # 1. Try BGE vector similarity if initialized
         if bge_initializer.is_available():
             try:
-                model = bge_initializer.load()
-                stmt_emb = model.encode(statement, normalize_embeddings=True)
-                evidence_embs = model.encode(evidence_texts, normalize_embeddings=True)
-                
-                # Dot product cosine similarity
-                sims = (evidence_embs @ stmt_emb).tolist()
-                best_idx = max(range(len(sims)), key=lambda i: sims[i])
-                best_score = float(sims[best_idx])
-                
-                chunk_id = kp.retrieved_evidence[best_idx].chunk_id if best_idx < len(kp.retrieved_evidence) else "ctx_block"
-                return best_score, chunk_id, evidence_texts[best_idx]
+                import numpy as np
+                stmt_embs = bge_initializer.encode([statement], normalize_embeddings=True)
+                evidence_embs = bge_initializer.encode(evidence_texts, normalize_embeddings=True)
+                if stmt_embs and evidence_embs:
+                    stmt_emb = np.array(stmt_embs[0])
+                    ev_embs = np.array(evidence_embs)
+                    sims = (ev_embs @ stmt_emb).tolist()
+                    best_idx = max(range(len(sims)), key=lambda i: sims[i])
+                    best_score = float(sims[best_idx])
+                    chunk_id = kp.retrieved_evidence[best_idx].chunk_id if best_idx < len(kp.retrieved_evidence) else "ctx_block"
+                    return best_score, chunk_id, evidence_texts[best_idx]
             except Exception as exc:
                 logger.warning("BGE encoding failed during fact check (%s); using token overlap fallback", exc)
 

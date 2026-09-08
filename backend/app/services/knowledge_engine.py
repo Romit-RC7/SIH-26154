@@ -221,7 +221,7 @@ class KnowledgeEngine:
         doc: SemanticDocument,
         retrieved_chunks: List[RetrievedChunk]
     ) -> List[VisualInsightItem]:
-        """Extracts visual elements (figures, charts) and their descriptive takeaways."""
+        """Extracts visual elements (figures, charts, memes) and their descriptive takeaways."""
         insights: List[VisualInsightItem] = []
         seen_element_ids = set()
 
@@ -230,7 +230,19 @@ class KnowledgeEngine:
                 seen_element_ids.add(elem.id)
                 raw_attrs = elem.content.raw_attributes or {}
                 raw_val = raw_attrs.get("visual_analysis") or raw_attrs.get("description")
-                if isinstance(raw_val, dict):
+
+                # Check for meme / informal graphic
+                is_meme = (
+                    raw_attrs.get("is_informal_graphic") is True
+                    or (isinstance(raw_val, dict) and str(raw_val.get("visual_type", "")).lower() in ("meme", "social_media_graphic"))
+                )
+
+                if is_meme and isinstance(raw_val, dict):
+                    overlay_list = raw_attrs.get("overlay_text") or raw_val.get("overlay_text") or raw_val.get("visible_text") or []
+                    overlay_str = ", ".join(overlay_list) if isinstance(overlay_list, list) else str(overlay_list)
+                    core_concept = raw_attrs.get("core_concept") or raw_val.get("core_concept_or_humor_theme") or raw_val.get("description") or "Tech concept"
+                    analysis = f"Informal Graphic/Meme Overlay Text: '{overlay_str}'. Core Theme: {core_concept}"
+                elif isinstance(raw_val, dict):
                     analysis = raw_val.get("_raw_text") or raw_val.get("summary") or " ".join(str(v) for v in raw_val.values())
                 elif isinstance(raw_val, list):
                     analysis = " ".join(str(v) for v in raw_val)

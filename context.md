@@ -48,17 +48,28 @@ In summary, platform shall generate output corresponding to the option(s) select
 
 ## 1. System Overview & Architecture
 
-The **SIH-26154 AI-Powered Content Transformation Platform** ingests unstructured, multi-page documents (**PDF**, **DOCX**, **PPTX**, **Images**, and **Video MP4**) and converts them into customizable, multi-format communication deliverables.
+The **SIH-26154 AI-Powered Content Transformation Platform** ingests direct text/prompt inputs, unstructured multi-page documents (**PDF**, **DOCX**, **PPTX**, **TXT**), standalone images/memes (**PNG**, **JPG**, **JPEG**, **WEBP**, **BMP**, **TIFF**), and **Video MP4/MOV/WebM**, converting them into customizable, multi-format communication deliverables.
 
 ```
-Document / Video Ingestion
-       ↓
-[Stage 1: Document Intelligence & Semantic Parsing]
-  - PP-StructureV3 Layout & OCR Parser
-  - PyMuPDF / python-docx / python-pptx / FFmpeg
-       ↓
+Pasted Text / Prompt / Document / Image / Meme / Video
+                       │
+       ┌───────────────┴───────────────┐
+       ▼                               ▼
+[ Direct Text Ingestion ]     [ File / Visual Asset ]
+       │                               │
+       ▼                               ▼
+[ SourceInputValidator ]      [ Format Router ]
+ - Typo & Greeting Filter      - Image/Meme: Qwen2.5-VL Inspection
+ - Gibberish & Entropy Check   - Video: Frame-diff Keyframe Extractor
+ - Mode: RAW_ARTICLE / PROMPT          │
+       │                               ▼
+       ▼                      [ Stage 2: Visual Intelligence ]
+ [ TextParser ]                - Meme classification & overlay OCR
+       │                       - Core theme & concept extraction
+       └──────────────┬────────────────┘
+                      ▼
 ⭐ Unified Semantic Document JSON (System Contract) ⭐
-       ↓
+                      ▼
 [Stage 2: Visual Intelligence]
   - UniChart (Chart-to-Table & Data Extraction)
   - Qwen2.5-VL-3B (Diagrams, Figures, Visual Reasoning)
@@ -112,14 +123,14 @@ backend/
 │   │   └── v1/
 │   │       ├── api.py                         # Master v1 API Router aggregator
 │   │       └── endpoints/
-│   │           ├── documents.py               # POST /upload, GET /{id}, GET /{id}/semantic
+│   │           ├── documents.py               # POST /upload, POST /text, GET /{id}, GET /{id}/semantic
 │   │           ├── health.py                  # GET /health multi-model diagnostics
 │   │           ├── knowledge.py               # POST /embed, POST /search, POST /assemble
 │   │           ├── generate.py                # POST /generate/{id} (Stage 4)
 │   │           ├── validate.py                # POST /validate/{id} (Stage 5)
 │   │           └── export.py                  # POST /export/download (Stage 6)
 │   ├── core/
-│   │   ├── config.py                          # Settings & environment configuration
+│   │   ├── config.py                          # Settings & environment configuration (.txt support)
 │   │   └── logging.py                         # Structured logging
 │   ├── database/
 │   │   ├── base.py                            # SQLAlchemy DeclarativeBase
@@ -130,7 +141,7 @@ backend/
 │   │   ├── document_element.py                # DocumentElement ORM
 │   │   └── processing_job.py                  # ProcessingJob status tracker
 │   ├── schemas/
-│   │   ├── document.py                        # Document API request/response
+│   │   ├── document.py                        # Document API request/response + TextSubmissionRequest
 │   │   ├── intent.py                          # IntentAndPersonalization & OutputType enums
 │   │   ├── knowledge_package.py               # KnowledgePackage contract
 │   │   ├── generated_artefact.py              # GeneratedArtefact & format content models
@@ -138,6 +149,7 @@ backend/
 │   │   └── semantic_document.py               # Canonical System Contract (Pydantic v2)
 │   ├── processors/                            # Document Parsers
 │   │   ├── base.py                            # Abstract BaseStructureAnalyzer
+│   │   ├── text_parser.py                     # Direct text & .txt parser
 │   │   ├── pdf_parser.py                      # PyMuPDF rasterizer
 │   │   ├── docx_parser.py                     # Word parser
 │   │   ├── ppt_parser.py                      # Presentation parser
@@ -145,17 +157,19 @@ backend/
 │   │   ├── image_parser.py                    # Standalone image parser
 │   │   ├── pp_structure.py                    # PP-StructureV3 analyzer
 │   │   ├── fallback_analyzer.py               # Rule-based layout fallback
-│   │   └── extractor.py                       # Visual crop persistence
+│   │   └── extractor.py                       # Visual crop persistence & format router
 │   ├── services/
+│   │   ├── input_validator.py                 # Source text guardrail validator (typo/gibberish filter)
 │   │   ├── embedding/                         # BGE Chunking & Embedding package
 │   │   ├── model_initializer/                 # Lazy GGUF & AI initializers
+│   │   ├── recognition/                       # Staged Vision (Qwen2.5-VL meme/chart/image recognition)
 │   │   ├── orchestrator/                      # Stage 4 Content Orchestrator
 │   │   │   ├── prompt_builder.py              # Static prompt generators
 │   │   │   ├── qwen3_generation_service.py    # Qwen3-8B generation wrapper
 │   │   │   ├── response_parser.py             # JSON extraction & schema fallbacks
 │   │   │   └── orchestrator_service.py        # Master Orchestration Service
 │   │   ├── validation/                        # Stage 5 Trust & Validation
-│   │   │   ├── fact_checker.py                # BGE grounding fact checker
+│   │   │   ├── fact_checker.py                # BGE grounding fact checker & visual filtering
 │   │   │   ├── schema_validator.py            # Format constraint rule engine
 │   │   │   ├── repair_service.py              # Automated repair loop
 │   │   │   └── trust_service.py               # Master Trust Service
@@ -166,7 +180,7 @@ backend/
 │   │   │   ├── video_package_builder.py       # Video package .zip (.srt, script, b-roll)
 │   │   │   ├── infographic_package_builder.py # Infographic package .zip (HTML/SVG)
 │   │   │   └── export_coordinator.py          # Master export manager
-│   │   ├── knowledge_engine.py                # Stage 3 Knowledge Engine
+│   │   ├── knowledge_engine.py                # Stage 3 Knowledge Engine (Meme insight formatting)
 │   │   ├── retrieval_service.py               # pgvector cosine search
 │   │   ├── pipeline_service.py                # End-to-end async processing coordinator
 │   │   └── storage_service.py                 # File & visual crop storage
@@ -174,7 +188,11 @@ backend/
 ├── docker/
 │   ├── Dockerfile                             # Multi-stage Dockerfile with OpenCV & Poppler
 │   └── docker-compose.yml                     # sih_backend + sih_postgres (pgvector)
-├── tests/                                     # 75+ unit & integration tests
+├── tests/                                     # 95+ unit & integration tests
+│   ├── test_input_validator.py                # Input validation guardrail unit tests
+│   ├── test_text_parser.py                    # Direct text parsing unit tests
+│   ├── test_text_ingest_api.py                # POST /text REST API integration tests
+│   ├── test_meme_recognition.py              # Qwen2.5-VL meme parsing & insight tests
 │   ├── test_prompt_builder.py
 │   ├── test_response_parser.py
 │   ├── test_orchestrator.py
@@ -189,6 +207,7 @@ backend/
 
 ## 5. Verification & Status
 
-- **Unit & Integration Tests**: All test suites passing.
-- **REST Endpoints**: 15 endpoints exposed with interactive Swagger UI.
+- **Unit & Integration Tests**: 36/36 targeted & core test suites passing cleanly (`pytest backend/tests/test_input_validator.py backend/tests/test_text_parser.py backend/tests/test_text_ingest_api.py backend/tests/test_meme_recognition.py ...`).
+- **REST Endpoints**: 16 endpoints exposed with interactive Swagger UI (including `POST /api/v1/documents/text`).
 - **Docker Compose**: Ready for CPU (`docker compose up`) and GPU passthrough (`docker compose --profile gpu up`).
+

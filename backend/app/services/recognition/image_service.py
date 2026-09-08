@@ -85,7 +85,8 @@ class ImageRecognitionService:
             "Do not guess what the image might represent from context or prior knowledge.\n"
             "2. Identify the visual type conservatively. Choose the simplest accurate category "
             "such as: person, natural_scenery, photograph, illustration, screenshot, diagram, "
-            "flowchart, technical_drawing, scientific_figure, chart, document, map, or other.\n"
+            "flowchart, technical_drawing, scientific_figure, chart, document, map, meme, "
+            "social_media_graphic, or other.\n"
             "3. Describe ONLY objects, shapes, structures, people, text, and relationships that "
             "are directly visible. Never invent details to make the description more complete.\n"
             "4. If an object or detail is unclear, cropped, too small, or not visibly supported, "
@@ -102,7 +103,12 @@ class ImageRecognitionService:
             "out rather than guessing.\n"
             "10. Before answering, internally check every claim: "
             "\"Can I point to visible evidence for this claim in this image?\" "
-            "If not, remove the claim.\n\n"
+            "If not, remove the claim.\n"
+            "11. If the image is a meme, comic, or social media post: identify visual_type as 'meme' "
+            "or 'social_media_graphic'. Extract all overlay caption text into overlay_text. "
+            "In core_concept_or_humor_theme, describe the underlying subject, problem, or message "
+            "(e.g. 'Production outage during Friday deploy', 'Legacy code refactoring friction'). "
+            "For standard documents/diagrams, set overlay_text to [] and core_concept_or_humor_theme to null.\n\n"
             f"{ocr_evidence}\n"
             "Return ONLY a valid JSON object. Do not include markdown, explanations, or text "
             "outside the JSON.\n\n"
@@ -111,6 +117,8 @@ class ImageRecognitionService:
             '  "visual_type": "<single conservative category>",\n'
             '  "description": "<short objective description containing only directly visible information>",\n'
             '  "visible_text": ["<only clearly readable text>"],\n'
+            '  "overlay_text": ["<extracted meme/graphic overlay text phrases>"],\n'
+            '  "core_concept_or_humor_theme": "<underlying subject or concept if meme/graphic, else null>",\n'
             '  "key_details": ["<only directly observable visual details>"]\n'
             "}"
         )
@@ -157,6 +165,14 @@ class ImageRecognitionService:
                 element.type = "chart"
             elif "diagram" in vis_type or "flowchart" in vis_type:
                 element.type = "figure"
+            elif "meme" in vis_type or "social_media" in vis_type:
+                element.attributes["is_informal_graphic"] = True
+                element.attributes["overlay_text"] = (
+                    payload.get("overlay_text")
+                    or payload.get("visible_text")
+                    or []
+                )
+                element.attributes["core_concept"] = payload.get("core_concept_or_humor_theme")
 
     @staticmethod
     def _data_uri(image: Image.Image, max_dim: int = 672) -> str:

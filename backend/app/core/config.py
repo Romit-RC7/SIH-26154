@@ -97,6 +97,7 @@ class Settings(BaseSettings):
         ".pdf",
         ".docx",
         ".pptx",
+        ".txt",
         ".jpg",
         ".jpeg",
         ".png",
