@@ -50,7 +50,7 @@ class Qwen3GenerationService:
                 model = qwen_orchestrator_initializer.load()
                 response = model.create_chat_completion(
                     messages=[
-                        {"role": "system", "content": "You are a professional content generation AI. Output valid JSON strictly grounded in the given context."},
+                        {"role": "system", "content": "You are a professional content generation AI. Output valid JSON strictly grounded in the given context. Return ONLY a valid JSON object. Do not include explanations, reasoning, markdown code fences, or <think> blocks."},
                         {"role": "user", "content": prompt}
                     ],
                     temperature=temp,

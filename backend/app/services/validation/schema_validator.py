@@ -37,30 +37,64 @@ class SchemaValidator:
         violations = val_func(content)
 
         is_compliant = len(violations) == 0
-        logger.info("Schema validation for artefact %s (%s): compliant=%s, violations=%d", artefact.artefact_id, out_type.value, is_compliant, len(violations))
+        if not is_compliant:
+            logger.warning(
+                "Schema validation failed for artefact %s (%s) with %d violation(s):\n%s",
+                artefact.artefact_id,
+                out_type.value,
+                len(violations),
+                "\n".join(f"  - {viol}" for viol in violations),
+            )
+        else:
+            logger.info(
+                "Schema validation for artefact %s (%s): compliant=True, violations=0",
+                artefact.artefact_id,
+                out_type.value,
+            )
         return is_compliant, violations
 
     def _validate_linkedin(self, content: Dict[str, Any]) -> List[str]:
         v: List[str] = []
-        hook = content.get("hook", "")
-        body = content.get("body", "")
-        cta = content.get("cta", "")
-        hashtags = content.get("hashtags", [])
 
-        if not hook or len(hook.strip()) < 10:
-            v.append("LinkedIn post is missing a strong hook sentence.")
+        # 1. Field presence and type checks
+        if "hook" not in content or not content.get("hook"):
+            v.append("Missing field: hook")
+        elif not isinstance(content["hook"], str):
+            v.append("Invalid field type: hook")
+        elif len(content["hook"].strip()) < 10:
+            v.append("LinkedIn post is missing a strong hook sentence (minimum 10 characters).")
 
-        words = len(f"{hook} {body} {cta}".split())
-        if words < 80:
-            v.append(f"LinkedIn post is too short ({words} words; minimum 80 words).")
-        elif words > 400:
-            v.append(f"LinkedIn post is too long ({words} words; maximum 400 words).")
+        if "body" not in content or not content.get("body"):
+            v.append("Missing field: body")
+        elif not isinstance(content["body"], str):
+            v.append("Invalid field type: body")
 
-        if not cta or len(cta.strip()) < 10:
+        if "cta" not in content or not content.get("cta"):
+            v.append("Missing field: cta")
+        elif not isinstance(content["cta"], str):
+            v.append("Invalid field type: cta")
+        elif len(content["cta"].strip()) < 10:
             v.append("LinkedIn post is missing a clear call-to-action (CTA).")
 
-        if not hashtags or len(hashtags) < 2:
+        if "hashtags" not in content:
+            v.append("Missing field: hashtags")
+        elif not isinstance(content["hashtags"], list):
+            v.append("Invalid field type: hashtags")
+        elif len(content["hashtags"]) < 2:
             v.append("LinkedIn post must contain at least 2 hashtags.")
+        elif any(not isinstance(h, str) for h in content["hashtags"]):
+            v.append("Invalid field type: hashtags")
+
+        # 2. Word count bounds
+        hook_str = str(content.get("hook", "")) if isinstance(content.get("hook"), str) else ""
+        body_str = str(content.get("body", "")) if isinstance(content.get("body"), str) else ""
+        cta_str = str(content.get("cta", "")) if isinstance(content.get("cta"), str) else ""
+        words = len(f"{hook_str} {body_str} {cta_str}".split())
+
+        if words < 80:
+            v.append(f"Word count below minimum: LinkedIn post is too short ({words} words; minimum 80 words).")
+        elif words > 400:
+            v.append(f"Word count above maximum: LinkedIn post is too long ({words} words; maximum 400 words).")
 
         return v
 

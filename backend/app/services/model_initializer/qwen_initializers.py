@@ -132,18 +132,18 @@ class QwenFusionInitializer(QwenModelInitializer):
 
 class QwenOrchestratorInitializer(QwenModelInitializer):
     """
-    Lazy Qwen3-8B initializer used for multi-format content orchestration and generation.
+    Lazy Qwen3-4B initializer used for multi-format content orchestration and generation.
     Includes VRAM-aware GPU layer allocation and graceful fallback to CPU or Qwen3-4B.
     """
 
     def __init__(self, model_dir: Optional[Path] = None, n_ctx: int = 8192):
         super().__init__(
-            model_dir=model_dir or settings.MODELS_DIR / "qwen3_8b_q4",
-            model_pattern="Qwen3-8B*.gguf",
-            name="Qwen3-8B",
+            model_dir=model_dir or settings.MODELS_DIR / "qwen3_4b_q4",
+            model_pattern="Qwen3-4B*.gguf",
+            name="Qwen3-4B",
             n_ctx=n_ctx,
         )
-        self.active_model_name = "Qwen3-8B"
+        self.active_model_name = "Qwen3-4B"
 
     def _determine_gpu_layers(self) -> int:
         """Calculates safe n_gpu_layers based on available VRAM."""

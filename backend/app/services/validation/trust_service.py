@@ -30,8 +30,8 @@ class TrustService:
         """
         logger.info("Executing Trust & Validation Layer for artefact %s", artefact.artefact_id)
 
-        # 1. Fact Verification & Grounding Check
-        trust_score, is_fully_grounded, claim_verifications = fact_checker.verify_factuality(artefact, kp)
+        # 1. Fact Verification & Grounding Check on original parsed LLM artefact
+        original_trust_score, is_fully_grounded, claim_verifications = fact_checker.verify_factuality(artefact, kp)
 
         # 2. Schema Compliance Check
         is_schema_compliant, violations = schema_validator.validate_schema(artefact)
@@ -39,6 +39,7 @@ class TrustService:
         target_artefact = artefact
         was_repaired = False
         repair_attempts = 0
+        repaired_trust_score = None
 
         # 3. Trigger Repair Loop if schema violations exist and auto_repair is True
         if not is_schema_compliant and auto_repair:
@@ -50,11 +51,15 @@ class TrustService:
             was_repaired = True
             # Re-verify schema violations on repaired artefact
             _, violations = schema_validator.validate_schema(target_artefact)
+            # Compute trust score on repaired artefact
+            repaired_trust_score, _, _ = fact_checker.verify_factuality(target_artefact, kp)
 
         report = ValidationReport(
             artefact_id=target_artefact.artefact_id,
             output_type=target_artefact.output_type.value,
-            trust_score=trust_score,
+            trust_score=original_trust_score,
+            original_trust_score=original_trust_score,
+            repaired_trust_score=repaired_trust_score,
             is_fully_grounded=is_fully_grounded,
             schema_compliance=is_schema_compliant,
             claim_verifications=claim_verifications,

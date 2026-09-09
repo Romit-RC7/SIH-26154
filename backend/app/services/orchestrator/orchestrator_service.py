@@ -74,7 +74,10 @@ class OrchestratorService:
             prompt = prompt_builder.build_prompt(out_type, kp)
 
             raw_text, meta = qwen3_generation_service.generate(prompt, out_type)
-            status, content_dict = response_parser.parse_response(raw_text, out_type, kp)
+            status, content_dict, diagnostics = response_parser.parse_response(
+                raw_text, out_type, kp, return_diagnostics=True
+            )
+            meta.update(diagnostics)
 
             artefact = GeneratedArtefact(
                 artefact_id=f"art_{uuid.uuid4().hex[:12]}",
@@ -92,8 +95,11 @@ class OrchestratorService:
                 verified = trust_service.validate_and_enforce(artefact, kp, auto_repair=True)
                 artefact = verified.artefact
                 artefact.generation_metadata["trust_score"] = verified.validation_report.trust_score
+                artefact.generation_metadata["original_trust_score"] = verified.validation_report.original_trust_score
+                artefact.generation_metadata["repaired_trust_score"] = verified.validation_report.repaired_trust_score
                 artefact.generation_metadata["schema_compliance"] = verified.validation_report.schema_compliance
                 artefact.generation_metadata["violations"] = verified.validation_report.violations
+                artefact.generation_metadata["repair_attempts"] = verified.validation_report.repair_attempts
             except Exception as exc:
                 logger.warning("Stage 5 Trust & Validation failed for %s (%s); proceeding with unverified artefact", artefact.artefact_id, exc)
 

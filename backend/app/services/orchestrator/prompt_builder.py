@@ -53,7 +53,14 @@ class PromptBuilder:
             f"{custom_rules}\n\n"
             f"=== CRITICAL INSTRUCTIONS ===\n"
             f"1. Factual Grounding: Use ONLY facts, metrics, and entities from the provided evidence. DO NOT hallucinate.\n"
-            f"2. Format: Return ONLY a single raw JSON object matching the requested schema. No markdown backticks (no ```json), no intro or outro commentary.\n"
+            f"2. Strict JSON Output Requirement:\n"
+            f"   - Return ONLY a valid JSON object.\n"
+            f"   - Do not include explanations.\n"
+            f"   - Do not include markdown.\n"
+            f"   - Do not include code fences.\n"
+            f"   - Do not include <think> blocks.\n"
+            f"   - Do not include reasoning.\n"
+            f"   - Output must exactly match the required schema.\n"
         )
 
     @staticmethod
@@ -74,7 +81,7 @@ class PromptBuilder:
             f'  "hashtags": ["#AI", "#Innovation", "#Tech"],\n'
             f'  "word_count": 220\n'
             f"}}\n\n"
-            f"JSON Output:"
+            f"JSON Output (Return ONLY a single valid JSON object. No explanations, no markdown, no <think> blocks):"
         )
         return f"{header}\n{rules}"
 
@@ -97,7 +104,7 @@ class PromptBuilder:
             f'  ],\n'
             f'  "tweet_count": 6\n'
             f"}}\n\n"
-            f"JSON Output:"
+            f"JSON Output (Return ONLY a single valid JSON object. No explanations, no markdown, no <think> blocks):"
         )
         return f"{header}\n{rules}"
 
@@ -121,7 +128,7 @@ class PromptBuilder:
             f'  "recommendations": ["Actionable step 1...", "Actionable step 2..."],\n'
             f'  "conclusion": "Final concluding perspective"\n'
             f"}}\n\n"
-            f"JSON Output:"
+            f"JSON Output (Return ONLY a single valid JSON object. No explanations, no markdown, no <think> blocks):"
         )
         return f"{header}\n{rules}"
 
@@ -150,7 +157,7 @@ class PromptBuilder:
             f'  ],\n'
             f'  "slide_count": 6\n'
             f"}}\n\n"
-            f"JSON Output:"
+            f"JSON Output (Return ONLY a single valid JSON object. No explanations, no markdown, no <think> blocks):"
         )
         return f"{header}\n{rules}"
 
@@ -176,7 +183,7 @@ class PromptBuilder:
             f'  ],\n'
             f'  "cta": "Explore the full report"\n'
             f"}}\n\n"
-            f"JSON Output:"
+            f"JSON Output (Return ONLY a single valid JSON object. No explanations, no markdown, no <think> blocks):"
         )
         return f"{header}\n{rules}"
 
@@ -205,7 +212,7 @@ class PromptBuilder:
             f'  ],\n'
             f'  "full_subtitles": "Complete subtitle text..."\n'
             f"}}\n\n"
-            f"JSON Output:"
+            f"JSON Output (Return ONLY a single valid JSON object. No explanations, no markdown, no <think> blocks):"
         )
         return f"{header}\n{rules}"
 
@@ -229,7 +236,7 @@ class PromptBuilder:
             f'  "conclusion": "Final thoughts...",\n'
             f'  "tags": ["AI", "Transformation"]\n'
             f"}}\n\n"
-            f"JSON Output:"
+            f"JSON Output (Return ONLY a single valid JSON object. No explanations, no markdown, no <think> blocks):"
         )
         return f"{header}\n{rules}"
 
@@ -248,7 +255,7 @@ class PromptBuilder:
             f'  "key_points": ["Point 1", "Point 2"],\n'
             f'  "recommended_actions": ["Action 1"]\n'
             f"}}\n\n"
-            f"JSON Output:"
+            f"JSON Output (Return ONLY a single valid JSON object. No explanations, no markdown, no <think> blocks):"
         )
         return f"{header}\n{rules}"
 
