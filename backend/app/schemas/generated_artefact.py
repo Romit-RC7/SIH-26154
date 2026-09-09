@@ -155,3 +155,7 @@ class GenerateResponse(BaseModel):
     artefacts: List[GeneratedArtefact] = Field(default_factory=list, description="Generated deliverables")
     total_generation_time_seconds: float = Field(..., description="Total wall-clock generation time in seconds")
     model_name: str = Field(default="Qwen3-8B", description="Model engine used for generation")
+    timings: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="End-to-end timing telemetry in seconds, including document processing when run by this request",
+    )

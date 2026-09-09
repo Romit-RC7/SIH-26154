@@ -43,6 +43,7 @@ class OrchestratorService:
         4. Returns all generated artefacts.
         """
         overall_start = time.time()
+        timings: Dict[str, Any] = {}
         output_types = request.output_types or [OutputType.EXECUTIVE_SUMMARY]
 
         # 1. Assemble or retrieve KnowledgePackage
@@ -62,7 +63,14 @@ class OrchestratorService:
                 custom_instructions=request.custom_instructions,
             )
             logger.info("Assembling KnowledgePackage for document %s across %d output formats", document.id, len(output_types))
+            knowledge_started = time.time()
             kp = await knowledge_engine.assemble_knowledge(intent, document, db)
+            timings["knowledge_assembly_seconds"] = round(time.time() - knowledge_started, 2)
+
+        # Qwen3-4B is only needed for knowledge assembly. Release it before
+        # loading the 8B generator so both models do not compete for 8 GB VRAM.
+        from backend.app.services.model_initializer import qwen_fusion_initializer
+        qwen_fusion_initializer.unload()
 
         # 2. Sequential generation for each selected output format
         artefacts: List[GeneratedArtefact] = []
@@ -75,7 +83,9 @@ class OrchestratorService:
             kp.intent.output_type = out_type
             prompt = prompt_builder.build_prompt(out_type, kp)
 
+            generation_started = time.time()
             raw_text, meta = qwen3_generation_service.generate(prompt, out_type)
+            meta["stage_total_seconds"] = round(time.time() - generation_started, 2)
             status, content_dict, diagnostics = response_parser.parse_response(
                 raw_text, out_type, kp, return_diagnostics=True, debug_mode=is_debug
             )
@@ -92,6 +102,7 @@ class OrchestratorService:
             )
 
             # --- Stage 5: Trust, Validation & Schema Enforcement ---
+            validation_started = time.time()
             try:
                 from backend.app.services.validation.trust_service import trust_service
                 verified = trust_service.validate_and_enforce(artefact, kp, auto_repair=True)
@@ -105,10 +116,12 @@ class OrchestratorService:
                 artefact.generation_metadata["repair_attempts"] = verified.validation_report.repair_attempts
             except Exception as exc:
                 logger.warning("Stage 5 Trust & Validation failed for %s (%s); proceeding with unverified artefact", artefact.artefact_id, exc)
+            artefact.generation_metadata["validation_seconds"] = round(time.time() - validation_started, 2)
 
             artefacts.append(artefact)
 
         total_time = round(time.time() - overall_start, 2)
+        timings["content_generation_total_seconds"] = total_time
         model_name = artefacts[0].generation_metadata.get("model", "Qwen3-8B") if artefacts else "Qwen3-8B"
 
         logger.info("Successfully generated %d artefacts for doc %s in %.2fs", len(artefacts), document.id, total_time)
@@ -117,6 +130,7 @@ class OrchestratorService:
             artefacts=artefacts,
             total_generation_time_seconds=total_time,
             model_name=model_name,
+            timings=timings,
         )
 
 

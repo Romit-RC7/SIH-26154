@@ -5,6 +5,7 @@ and stores the finalized Semantic Document JSON in PostgreSQL.
 """
 
 import asyncio
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -103,6 +104,8 @@ class DocumentPipelineService:
             await session.commit()
 
             file_path = Path(doc.stored_path)
+            pipeline_started = time.perf_counter()
+            stage_timings = {}
             logger.info(f"Starting processing for Document {document_id} ({file_path.name})")
 
             # 2. Document Extraction & Structure Analysis (PP-StructureV3 / Fallback)
@@ -113,6 +116,14 @@ class DocumentPipelineService:
             raw_elements, meta = document_extractor.extract_document(
                 file_path=file_path,
                 document_id=document_id
+            )
+            stage_timings["extraction_and_recognition_seconds"] = round(time.perf_counter() - pipeline_started, 2)
+            stage_timings.update(meta.get("stage_timings", {}))
+            logger.info(
+                "Pipeline stage complete | document=%s | stage=extraction | elements=%d | elapsed=%.2fs",
+                document_id,
+                len(raw_elements),
+                time.perf_counter() - pipeline_started,
             )
 
             # Recognition is complete before fusion. The builder remains the
@@ -129,6 +140,14 @@ class DocumentPipelineService:
                 file_path=file_path,
                 raw_elements=raw_elements,
                 extraction_metadata=meta
+            )
+            stage_timings["semantic_fusion_seconds"] = round(
+                time.perf_counter() - pipeline_started - stage_timings["extraction_and_recognition_seconds"], 2
+            )
+            logger.info(
+                "Pipeline stage complete | document=%s | stage=semantic_fusion | elapsed=%.2fs",
+                document_id,
+                time.perf_counter() - pipeline_started,
             )
 
             # 4. Persistence Layer: Store in PostgreSQL
@@ -178,11 +197,17 @@ class DocumentPipelineService:
             job.processing_metadata = {
                 "elements_count": len(semantic_doc.elements),
                 "duration_seconds": (job.completed_at - job.started_at).total_seconds()
-                if job.started_at else 0
+                if job.started_at else 0,
+                "stage_timings": stage_timings,
             }
 
             await session.commit()
-            logger.info(f"Pipeline completed successfully for Document {document_id}")
+            logger.info(
+                "Pipeline completed | document=%s | elements=%d | elapsed=%.2fs",
+                document_id,
+                len(semantic_doc.elements),
+                time.perf_counter() - pipeline_started,
+            )
 
         except Exception as exc:
             logger.exception(f"Pipeline failed for Document {document_id}: {exc}")
@@ -219,6 +244,9 @@ class DocumentPipelineService:
                 job = job_query.scalar_one_or_none()
                 if not doc or not job:
                     logger.error("Skipping missing document/job in batch: %s/%s", document_id, job_id)
+                    continue
+                if job.status != JobStatus.QUEUED:
+                    logger.info("Skipping job already claimed by another pipeline: %s", job_id)
                     continue
 
                 job.status = JobStatus.PROCESSING

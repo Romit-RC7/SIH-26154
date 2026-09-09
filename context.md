@@ -2,7 +2,7 @@
 
 > **Project**: AI-Powered Content Transformation Platform (SIH-26154)
 > **Status**: All 6 Pipeline Stages Complete (Document Intelligence, Visual Reasoning, Knowledge Retrieval, Content Orchestration, Trust & Validation, Multi-Format Export)
-> **Updated**: September 8, 2026 (Session 10)
+> **Updated**: September 9, 2026 (Session 11)
 > **Repository**: [https://github.com/Romit-RC7/SIH-26154.git](https://github.com/Romit-RC7/SIH-26154.git)
 
 ---
@@ -104,11 +104,11 @@ All AI weights run locally offline after staging in `models/`:
 | Directory | Model Identifier | Task / Purpose | Memory & Hardware Allocation |
 |---|---|---|---|
 | `models/pp_structure_v3/` | PP-StructureV3 | OCR, Layout & Table Recognition | $\approx 600\text{ MB RAM}$ |
-| `models/unichart_base_960/` | UniChart-Base-960 | Plot/Chart Data Table Extraction | Transformers PyTorch ($\approx 800\text{ MB RAM}$) |
-| `models/qwen2.5_vl_3b_q4/` | Qwen2.5-VL-3B Q4 | Visual Diagram & Image Reasoning | GGUF + mmproj via llama-cpp ($\approx 2.5\text{ GB}$) |
+| `models/unichart_base_960/` | UniChart-Base-960 | Chart fallback when PP-Chart2Table cannot run | Transformers PyTorch; local GPU when available |
+| `models/qwen2.5_vl_3b_q4/` | Qwen2.5-VL-3B Q4 | Visual Diagram & Image Reasoning | GGUF + mmproj via llama-cpp; 2k context on the 8 GB RTX 4060 |
 | `models/bge_small_en_v1.5/` | BGE-small-en-v1.5 | 384-dim Dense Vector Embeddings | ONNX / Transformers ($133\text{ MB}$) |
 | `models/qwen3_4b_q4/` | Qwen3-4B Q4 | Knowledge Engine & Repair Loop | GGUF via llama-cpp ($\approx 2.5\text{ GB}$) |
-| `models/qwen3_8b_q4/` | Qwen3-8B Q4 | Content Orchestrator LLM | GGUF via llama-cpp ($\ge 5.5\text{GB GPU}$ or CPU) |
+| `models/qwen3_8b_q4/` | Qwen3-8B Q4 | Content Orchestrator LLM | GGUF via llama-cpp; 4k generation context, loaded after Qwen3-4B is released |
 | `models/faster_whisper_small/` | Faster-Whisper-small | Speech-to-Text Transcription | CTranslate2 (loaded only for audio videos) |
 
 ---
@@ -210,4 +210,13 @@ backend/
 - **Unit & Integration Tests**: 36/36 targeted & core test suites passing cleanly (`pytest backend/tests/test_input_validator.py backend/tests/test_text_parser.py backend/tests/test_text_ingest_api.py backend/tests/test_meme_recognition.py ...`).
 - **REST Endpoints**: 16 endpoints exposed with interactive Swagger UI (including `POST /api/v1/documents/text`).
 - **Docker Compose**: Ready for CPU (`docker compose up`) and GPU passthrough (`docker compose --profile gpu up`).
+
+### Session 15 Runtime Update — September 9, 2026
+
+- GPU runtime verified on RTX 4060 Laptop GPU (8 GB): Torch CUDA, Paddle CUDA, and llama.cpp GPU offload work inside `sih_backend_gpu`.
+- All configured Qwen, BGE, Faster-Whisper, UniChart, and PP-Structure weight packages are locally staged. PP-Structure table orientation now reuses the local `doc_ori` package rather than downloading a duplicate at runtime.
+- PP-Chart2Table weights are present, but the installed Paddle runtime lacks `fused_rms_norm_ext`; chart requests therefore use the staged UniChart Base 960 local fallback.
+- Qwen2.5-VL uses a 2k context; Qwen3-8B generation uses a 4k context. Qwen3-4B is released after knowledge assembly before 8B is loaded, reducing 8 GB VRAM contention.
+- `POST /api/v1/generate/{document_id}` can process a queued or failed document inline when semantic JSON is missing, then assemble knowledge, generate, and validate. Its JSON response includes `timings` for document processing (when run), knowledge assembly, generation, and end-to-end elapsed time.
+- Operational logs now report model/pipeline durations while suppressing prompts, OCR previews, raw model responses, and llama.cpp native token traces. Qwen3-8B is used only by `/generate`, not by normal upload processing.
 

@@ -1,5 +1,26 @@
 # SIH-26154 — Change History
 
+## Session 15 — 2026-09-09 — Docker Runtime, Offline Models & End-to-End Generation
+
+### What was done
+
+- Diagnosed Docker space usage: backend image was 32.8 GB and BuildKit cache 31.7 GB. No cache prune was performed. Removed the unnecessary `pip uninstall llama-cpp-python` build step; no rebuild is required for the running image.
+- Confirmed local model weights and CUDA support in the running container: Torch CUDA, Paddle CUDA, and llama.cpp GPU offload are available on the RTX 4060 Laptop GPU (8 GB).
+- Fixed PP-Structure table orientation to use the staged `doc_ori` model rather than downloading `PP-LCNet_x1_0_doc_ori` at runtime.
+- Added Paddle CUDA cache release at PP-Structure unload. Lowered Qwen vision context to 2k and Qwen generation context to 4k. Qwen3-4B is unloaded after knowledge assembly before Qwen3-8B generation begins.
+- Confirmed PP-Chart2Table model weights are present; its failure is the Paddle 3.0 runtime missing `fused_rms_norm_ext`, not missing weights. Wired the staged local UniChart Base 960 model as the automatic chart fallback.
+- Added concise timing logs for model loads, inference, pipeline stages, generation, validation, and total duration. Suppressed prompt/OCR/raw-response noise and llama.cpp native prompt/token trace output.
+- Corrected Qwen orchestrator telemetry to report `Qwen3-8B` when the local 8B GGUF is selected. Qwen3-8B runs through `/generate`; standard upload processing uses PP-Structure and Qwen2.5-VL.
+- Extended `POST /api/v1/generate/{document_id}`: when a queued or failed document lacks semantic JSON, it now runs processing inline before knowledge assembly, Qwen3 generation, and validation. It rejects an already-processing document with HTTP 409 to avoid duplicate workers.
+- Added `GenerateResponse.timings`, including processing stage timings when inline processing occurs, knowledge assembly, content-generation total, and end-to-end request elapsed time. Artefact metadata includes generation and validation durations.
+
+### Performance notes
+
+- Historical Qwen3-8B calls took roughly 72–134 seconds for generation, plus model loading, retrieval, and validation. The new memory handoff and reduced context aim to lower this; measure on a new generation request.
+- `accelerate` is installed but is not used by GGUF/llama-cpp Qwen inference, so it does not directly improve Qwen latency. It may assist Transformers models such as UniChart if GPU placement is changed later.
+
+---
+
 ## Session 14 — 2026-09-08 — Pluggable VLM Engine: Moondream2 (1.6B VLM) Integration
 
 ### What was done

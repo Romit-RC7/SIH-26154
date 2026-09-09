@@ -6,6 +6,9 @@ import base64
 import io
 import json
 import re
+import time
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import os
@@ -17,6 +20,29 @@ from backend.app.core.config import settings
 from backend.app.processors.base import RawDocumentElement
 from backend.app.services.model_initializer import qwen_vision_initializer, moondream_initializer
 from backend.app.services.recognition.resource_manager import ModelResourceManager
+
+
+_native_output_lock = threading.Lock()
+
+
+@contextmanager
+def _suppress_native_model_output():
+    """Hide llama.cpp's C-level prompt/CLIP trace for one inference call."""
+    stdout_fd, stderr_fd = 1, 2
+    with _native_output_lock:
+        saved_stdout = os.dup(stdout_fd)
+        saved_stderr = os.dup(stderr_fd)
+        null_fd = os.open(os.devnull, os.O_WRONLY)
+        try:
+            os.dup2(null_fd, stdout_fd)
+            os.dup2(null_fd, stderr_fd)
+            yield
+        finally:
+            os.dup2(saved_stdout, stdout_fd)
+            os.dup2(saved_stderr, stderr_fd)
+            os.close(saved_stdout)
+            os.close(saved_stderr)
+            os.close(null_fd)
 
 
 class ImageRecognitionService:
@@ -152,31 +178,11 @@ class ImageRecognitionService:
             return
 
         element_id = element.attributes.get("element_id", "unknown")
-        element_type = element.type
-        source = element.attributes.get("source", "document")
-        saved_image_path = element.attributes.get("saved_image_path", "N/A")
-        
-        logger.info(
-            "Qwen vision pipeline START | element_id=%s | type=%s | source=%s | path=%s",
-            element_id, element_type, source, saved_image_path
-        )
-
-        # ===== STEP 2: Verify image crop source =====
-        logger.info(
-            "Image ready for Qwen vision | element_id=%s | path=%s | size=%dx%d",
-            element_id, saved_image_path, image.width, image.height
-        )
-
-        # ===== STEP 3: Extract and log OCR evidence =====
+        # Keep logs operational: image dimensions and OCR text are available in
+        # the stored document result, but do not belong in normal container logs.
         ocr_text = str(element.attributes.get("ocr_text") or "").strip()
-        ocr_model = element.attributes.get("ocr_model", "N/A")
-        ocr_status = element.attributes.get("ocr_status", "N/A")
-        logger.info(
-            "OCR metadata | element_id=%s | status=%s | model=%s | text_length=%d | text_preview=%s",
-            element_id, ocr_status, ocr_model, len(ocr_text), ocr_text[:100] if ocr_text else "(empty)"
-        )
 
-        # ===== STEP 4: Reset KV cache =====
+        # Reset the KV cache before each independent crop.
         reset_fn = getattr(model, "reset", None)
         if callable(reset_fn):
             try:
@@ -184,8 +190,7 @@ class ImageRecognitionService:
             except Exception:
                 pass
 
-        # ===== STEP 5: Build simplified prompt (no OCR evidence by default to reduce contamination) =====
-        # To debug OCR contamination, set INCLUDE_OCR_EVIDENCE=true in environment
+        # OCR evidence is opt-in for debugging only.
         include_ocr = os.environ.get("INCLUDE_OCR_EVIDENCE", "false").lower() == "true"
         
         ocr_section = (
@@ -214,63 +219,58 @@ class ImageRecognitionService:
             "}"
         )
 
-        logger.info(
-            "Prompt prepared | element_id=%s | include_ocr=%s | prompt_len=%d",
-            element_id, include_ocr, len(prompt)
-        )
-
-        # ===== STEP 6: Call Qwen =====
+        # ===== Call Qwen =====
         try:
             logger.info("Qwen inference START | element_id=%s", element_id)
-            response = model.create_chat_completion(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a visual inspection system.\n"
-                            "Report only information directly visible in the image.\n"
-                            "Never guess, infer hidden context, or invent details.\n"
-                            "If uncertain, omit the information."
-                        ),
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": self._data_uri(image)}},
-                        ],
-                    },
-                ],
-                temperature=0.1,
-                max_tokens=384,
-                repeat_penalty=1.1,
+            inference_started = time.perf_counter()
+            with _suppress_native_model_output():
+                response = model.create_chat_completion(
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a visual inspection system.\n"
+                                "Report only information directly visible in the image.\n"
+                                "Never guess, infer hidden context, or invent details.\n"
+                                "If uncertain, omit the information."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {"type": "image_url", "image_url": {"url": self._data_uri(image)}},
+                            ],
+                        },
+                    ],
+                    temperature=0.1,
+                    max_tokens=384,
+                    repeat_penalty=1.1,
+                )
+            logger.info(
+                "Qwen inference END | element_id=%s | elapsed=%.2fs | response_type=%s",
+                element_id,
+                time.perf_counter() - inference_started,
+                type(response),
             )
-            logger.info("Qwen inference END | element_id=%s | response_type=%s", element_id, type(response))
             payload = self._response_payload(response)
         except Exception as exc:
             logger.warning("Error during Qwen vision inference | element_id=%s: %s", element_id, exc)
             payload = {"error": str(exc)}
 
-        # ===== STEP 7: Log raw response =====
-        raw_text = payload.get("_raw_text", "N/A")
-        logger.info(
-            "Raw Qwen response | element_id=%s | text_preview=%s",
-            element_id, raw_text[:200] if raw_text else "(empty)"
-        )
-
-        # ===== STEP 8: Attach results to element =====
+        # Attach the result to the element.
         element.attributes["visual_analysis"] = payload
         element.attributes["visual_analysis_model"] = self.model_name
         element.attributes["visual_analysis_status"] = "completed"
 
         logger.info(
-            "Qwen vision pipeline END | element_id=%s | visual_type=%s | visible_text_count=%d",
+            "Qwen vision completed | element_id=%s | visual_type=%s | visible_text_count=%d",
             element_id,
             payload.get("visual_type", "N/A"),
             len(payload.get("visible_text", []))
         )
 
-        # ===== STEP 9: Dynamic type classification =====
+        # Dynamic type classification.
         if isinstance(payload, dict):
             vis_type = str(payload.get("visual_type", "")).lower()
             if "chart" in vis_type or "graph" in vis_type or "plot" in vis_type:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from contextlib import ExitStack
+import time
 from typing import Any, Dict, List, Optional
 
 from PIL import Image
@@ -24,14 +25,28 @@ class RecognitionCoordinator:
         self.models_root = models_root or settings.PP_STRUCTURE_MODEL_DIR
 
     def recognize(self, elements: List[RawDocumentElement]) -> List[RawDocumentElement]:
+        recognized, _ = self.recognize_with_timings(elements)
+        return recognized
+
+    def recognize_with_timings(self, elements: List[RawDocumentElement]) -> tuple[List[RawDocumentElement], Dict[str, float]]:
+        """Run specialist stages and return individual wall-clock durations."""
+        timings: Dict[str, float] = {}
+        started = time.perf_counter()
         page_count = max([e.page for e in elements], default=1)
         from backend.app.services.recognition.image_deduplicator import visual_deduplicator
         visual_deduplicator.process_elements(elements, page_count=page_count)
+        timings["visual_deduplication_seconds"] = round(time.perf_counter() - started, 2)
 
+        started = time.perf_counter()
         self._run_formula_chart_stage(elements)
+        timings["formula_and_chart_seconds"] = round(time.perf_counter() - started, 2)
+        started = time.perf_counter()
         speech_recognition_service.recognize(elements)
+        timings["speech_recognition_seconds"] = round(time.perf_counter() - started, 2)
+        started = time.perf_counter()
         image_recognition_service.recognize(elements)
-        return elements
+        timings["qwen_vision_seconds"] = round(time.perf_counter() - started, 2)
+        return elements, timings
 
     def recognize_batch(
         self,
@@ -65,8 +80,11 @@ class RecognitionCoordinator:
         chart_ready = chart_recognition_service._is_ready()
         if not formula_ready:
             self._mark_unavailable(formula_targets, "formula", "PP-FormulaNet_plus-M", formula_dir)
-        if not chart_ready:
-            chart_recognition_service._mark_unavailable(chart_targets)
+
+        # PP-Chart2Table needs Paddle's fused RMS extension. When that optional
+        # extension is absent, run the staged UniChart fallback instead.
+        if chart_targets and not chart_ready:
+            chart_recognition_service._recognize_with_unichart(chart_targets)
 
         formula_manager = ModelResourceManager(
             loader=lambda: self._create_model("PP-FormulaNet_plus-M", formula_dir),

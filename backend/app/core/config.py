@@ -115,12 +115,15 @@ class Settings(BaseSettings):
 
     # LLM & Vision Model Configuration
     # Options for VLM_ENGINE: "qwen2.5_vl" (Default Qwen2.5-VL-3B Q4) or "moondream2" (Moondream2 1.6B VLM)
-    VLM_ENGINE: str = "moondream2"
+    VLM_ENGINE: str = "qwen2.5_vl"
     MOONDREAM_MODEL_DIR: Path = MODELS_DIR / "moondream2"
     HF_MODULES_CACHE: Path = Path("/tmp/huggingface/modules")
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:latest"
-    QWEN_VISION_N_CTX: int = 4096
+    # 2k covers document-image prompts while leaving headroom for the Qwen
+    # vision model and projector on the 8 GB deployment GPU.
+    QWEN_VISION_N_CTX: int = 2048
+    QWEN_GENERATION_N_CTX: int = 4096
 
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["*"]

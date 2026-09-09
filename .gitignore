@@ -47,3 +47,24 @@ scripts/
 
 wheels/
 *.whl
+
+# Frontend dependencies, builds, caches, and local tooling
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+.svelte-kit/
+.vite/
+.cache/
+coverage/
+*.tsbuildinfo
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS metadata
+.DS_Store
+Thumbs.db

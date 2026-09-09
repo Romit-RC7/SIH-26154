@@ -3,11 +3,33 @@
 from __future__ import annotations
 
 import gc
+import time
 from pathlib import Path
 from typing import Any, Optional
 
 from backend.app.core.config import settings
 from backend.app.core.logging import logger
+
+
+_llama_quiet_callback: Any = None
+
+
+def _quiet_llama_native_logs() -> None:
+    """Discard llama.cpp's prompt/token debug trace; Python logs retain outcomes."""
+    global _llama_quiet_callback
+    if _llama_quiet_callback is not None:
+        return
+    try:
+        from llama_cpp import llama_log_callback, llama_log_set
+
+        @llama_log_callback
+        def _discard_native_log(_level: int, _text: bytes, _user_data: Any) -> None:
+            return
+
+        _llama_quiet_callback = _discard_native_log
+        llama_log_set(_llama_quiet_callback, None)
+    except Exception as exc:
+        logger.debug("Could not quiet llama.cpp native logs: %s", exc)
 
 
 class QwenModelInitializer:
@@ -43,6 +65,7 @@ class QwenModelInitializer:
             ) from exc
 
         logger.info("Loading local Qwen model: %s (n_gpu_layers=%s)", model_path, settings.N_GPU_LAYERS)
+        load_started = time.perf_counter()
         self.model = Llama(
             model_path=str(model_path),
             chat_format="chatml",
@@ -50,6 +73,8 @@ class QwenModelInitializer:
             n_gpu_layers=settings.N_GPU_LAYERS,
             verbose=False,
         )
+        _quiet_llama_native_logs()
+        logger.info("Loaded local Qwen model: %s in %.2fs", self.name, time.perf_counter() - load_started)
         return self.model
 
     def unload(self) -> None:
@@ -101,6 +126,7 @@ class QwenVisionInitializer(QwenModelInitializer):
             ) from exc
 
         logger.info("Loading local Qwen vision model: %s (n_gpu_layers=%s)", model_path, settings.N_GPU_LAYERS)
+        load_started = time.perf_counter()
         self.chat_handler = Qwen25VLChatHandler(
             clip_model_path=str(projector_path),
             verbose=False,
@@ -112,6 +138,8 @@ class QwenVisionInitializer(QwenModelInitializer):
             n_gpu_layers=settings.N_GPU_LAYERS,
             verbose=False,
         )
+        _quiet_llama_native_logs()
+        logger.info("Loaded local Qwen vision model: %s in %.2fs", self.name, time.perf_counter() - load_started)
         return self.model
 
     def unload(self) -> None:
@@ -137,14 +165,14 @@ class QwenOrchestratorInitializer(QwenModelInitializer):
     Includes VRAM-aware GPU layer allocation and graceful fallback to CPU or Qwen3-4B.
     """
 
-    def __init__(self, model_dir: Optional[Path] = None, n_ctx: int = 8192):
+    def __init__(self, model_dir: Optional[Path] = None, n_ctx: Optional[int] = None):
         super().__init__(
             model_dir=model_dir or settings.MODELS_DIR / "qwen3_8b_q4",
             model_pattern="Qwen3-8B*.gguf",
             name="Qwen3-8B",
-            n_ctx=n_ctx,
+            n_ctx=n_ctx or settings.QWEN_GENERATION_N_CTX,
         )
-        self.active_model_name = "Qwen3-4B"
+        self.active_model_name = "Qwen3-8B"
 
     def _determine_gpu_layers(self) -> int:
         """Calculates safe n_gpu_layers based on available VRAM."""
@@ -183,6 +211,8 @@ class QwenOrchestratorInitializer(QwenModelInitializer):
                 raise FileNotFoundError(
                     f"Neither Qwen3-8B ({self.model_dir}) nor Qwen3-4B ({fallback_dir}) GGUF model files exist."
                 )
+        else:
+            self.active_model_name = "Qwen3-8B"
 
         try:
             from llama_cpp import Llama
@@ -218,7 +248,9 @@ class QwenOrchestratorInitializer(QwenModelInitializer):
         return self.model
 
 
-qwen_vision_initializer = QwenVisionInitializer()
+# Document crops do not need a 4k context. Respect the setting so an 8 GB GPU
+# has headroom for Qwen's model, projector, and generation KV cache.
+qwen_vision_initializer = QwenVisionInitializer(n_ctx=settings.QWEN_VISION_N_CTX)
 qwen_fusion_initializer = QwenFusionInitializer()
 qwen_orchestrator_initializer = QwenOrchestratorInitializer()
 

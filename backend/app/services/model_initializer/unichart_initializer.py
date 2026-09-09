@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gc
+import warnings
 from pathlib import Path
 from typing import Any, Optional
 
@@ -57,9 +58,12 @@ class UniChartInitializer:
             self.device_name or ("cuda" if torch.cuda.is_available() else "cpu")
         )
         logger.info("Loading local UniChart model from %s on %s", self.model_dir, self.device)
+        # UniChart was saved with the original processor. Make that choice
+        # explicit to avoid the Transformers future-default warning.
         self.processor = DonutProcessor.from_pretrained(
             str(self.model_dir),
             local_files_only=True,
+            use_fast=False,
         )
         self.model = VisionEncoderDecoderModel.from_pretrained(
             str(self.model_dir),
@@ -79,6 +83,12 @@ class UniChartInitializer:
         if model is not None:
             del model
         gc.collect()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
         logger.info("Unloaded local UniChart model")
 
 

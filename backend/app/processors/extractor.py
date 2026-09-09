@@ -5,6 +5,7 @@ persists visual crops (figures, charts, tables) to disk, and normalizes layout o
 """
 
 from pathlib import Path
+import time
 from typing import List, Tuple
 from backend.app.processors.base import RawDocumentElement, ParsedPage
 from backend.app.processors.pdf_parser import pdf_parser
@@ -72,7 +73,9 @@ class DocumentExtractor:
         unload_structure: bool = True,
     ) -> Tuple[List[RawDocumentElement], dict]:
         """Process PDF through page rendering and structure analysis."""
+        parse_started = time.perf_counter()
         pages, raw_blocks, meta = pdf_parser.parse(file_path)
+        timings = {"source_parse_seconds": round(time.perf_counter() - parse_started, 2)}
         all_elements: List[RawDocumentElement] = []
 
         use_pp = settings.DOC_ANALYZER_ENGINE == "pp_structure" and pp_structure_analyzer.is_available()
@@ -80,12 +83,14 @@ class DocumentExtractor:
 
         if use_pp:
             try:
+                layout_started = time.perf_counter()
                 logger.info("Extracting PDF layout using PP-StructureV3...")
                 for page in pages:
                     if page.image:
                         page_elems = pp_structure_analyzer.analyze_page(page.image, page.page_number)
                         all_elements.extend(page_elems)
                 extracted_with_pp = True
+                timings["layout_ocr_and_tables_seconds"] = round(time.perf_counter() - layout_started, 2)
             except Exception as e:
                 logger.error(
                     f"PaddleOCR structure analysis failed. Falling back to PyMuPDF analyzer: {e}"
@@ -94,6 +99,7 @@ class DocumentExtractor:
                 extracted_with_pp = False
 
         if not extracted_with_pp:
+            layout_started = time.perf_counter()
             if not use_pp:
                 logger.warning("PaddleOCR structure analyzer unavailable. Using fallback analyzer.")
             logger.info("Extracting PDF layout using Fallback / PyMuPDF Structure Analyzer...")
@@ -107,8 +113,10 @@ class DocumentExtractor:
                 )
                 all_elements.extend(page_elems)
             doc.close()
+            timings["layout_ocr_and_tables_seconds"] = round(time.perf_counter() - layout_started, 2)
 
         # Save visual crops (figures, charts, images, tables) to local disk via StorageService
+        crops_started = time.perf_counter()
         processed_elements: List[RawDocumentElement] = []
         for idx, elem in enumerate(all_elements):
             element_id = f"elem_{document_id[:8]}_{elem.page}_{idx + 1}"
@@ -127,12 +135,15 @@ class DocumentExtractor:
                     logger.warning(f"Could not persist crop for element {element_id}: {e}")
 
             processed_elements.append(elem)
+        timings["visual_crop_persistence_seconds"] = round(time.perf_counter() - crops_started, 2)
 
         if unload_structure:
             pp_structure_analyzer.unload()
         if run_specialist_recognition:
-            recognition_coordinator.recognize(processed_elements)
+            _, recognition_timings = recognition_coordinator.recognize_with_timings(processed_elements)
+            timings.update(recognition_timings)
         meta["extracted_elements_count"] = len(processed_elements)
+        meta["stage_timings"] = timings
         return processed_elements, meta
 
     def _extract_docx(
@@ -143,7 +154,10 @@ class DocumentExtractor:
         unload_structure: bool = True,
     ) -> Tuple[List[RawDocumentElement], dict]:
         """Process DOCX paragraphs, tables, and images."""
+        parse_started = time.perf_counter()
         _, raw_elements, meta = docx_parser.parse(file_path)
+        timings = {"source_parse_seconds": round(time.perf_counter() - parse_started, 2)}
+        crops_started = time.perf_counter()
         processed: List[RawDocumentElement] = []
 
         for idx, elem in enumerate(raw_elements):
@@ -164,12 +178,15 @@ class DocumentExtractor:
 
             processed.append(elem)
 
+        timings["visual_crop_persistence_seconds"] = round(time.perf_counter() - crops_started, 2)
         if unload_structure:
             pp_structure_analyzer.unload()
         if run_specialist_recognition:
-            recognition_coordinator.recognize(processed)
+            _, recognition_timings = recognition_coordinator.recognize_with_timings(processed)
+            timings.update(recognition_timings)
 
         meta["extracted_elements_count"] = len(processed)
+        meta["stage_timings"] = timings
         return processed, meta
 
 
@@ -180,7 +197,10 @@ class DocumentExtractor:
         run_specialist_recognition: bool = True,
         unload_structure: bool = True,
     ):
+        parse_started = time.perf_counter()
         _, raw_elements, meta = ppt_parser.parse(file_path)
+        timings = {"source_parse_seconds": round(time.perf_counter() - parse_started, 2)}
+        crops_started = time.perf_counter()
 
         processed = []
 
@@ -209,11 +229,14 @@ class DocumentExtractor:
                     )
 
             processed.append(elem)
+        timings["visual_crop_persistence_seconds"] = round(time.perf_counter() - crops_started, 2)
         if unload_structure:
             pp_structure_analyzer.unload()
         if run_specialist_recognition:
-            recognition_coordinator.recognize(processed)
+            _, recognition_timings = recognition_coordinator.recognize_with_timings(processed)
+            timings.update(recognition_timings)
         meta["extracted_elements_count"] = len(processed)
+        meta["stage_timings"] = timings
 
         return processed, meta
 
@@ -224,7 +247,10 @@ class DocumentExtractor:
         run_specialist_recognition: bool = True,
         unload_structure: bool = True,
     ):
+        parse_started = time.perf_counter()
         _, raw_elements, meta = image_parser.parse(file_path)
+        timings = {"source_parse_seconds": round(time.perf_counter() - parse_started, 2)}
+        crops_started = time.perf_counter()
 
         processed = []
 
@@ -253,11 +279,14 @@ class DocumentExtractor:
                     )
 
             processed.append(elem)
+        timings["visual_crop_persistence_seconds"] = round(time.perf_counter() - crops_started, 2)
         if unload_structure:
             pp_structure_analyzer.unload()
         if run_specialist_recognition:
-            recognition_coordinator.recognize(processed)
+            _, recognition_timings = recognition_coordinator.recognize_with_timings(processed)
+            timings.update(recognition_timings)
         meta["extracted_elements_count"] = len(processed)
+        meta["stage_timings"] = timings
 
         return processed, meta
 
@@ -269,7 +298,9 @@ class DocumentExtractor:
         unload_structure: bool = True,
     ) -> Tuple[List[RawDocumentElement], dict]:
         """Process plain text files."""
+        parse_started = time.perf_counter()
         _, raw_elements, meta = text_parser.parse(file_path)
+        timings = {"source_parse_seconds": round(time.perf_counter() - parse_started, 2)}
         processed: List[RawDocumentElement] = []
 
         for idx, elem in enumerate(raw_elements):
@@ -280,9 +311,11 @@ class DocumentExtractor:
         if unload_structure:
             pp_structure_analyzer.unload()
         if run_specialist_recognition:
-            recognition_coordinator.recognize(processed)
+            _, recognition_timings = recognition_coordinator.recognize_with_timings(processed)
+            timings.update(recognition_timings)
 
         meta["extracted_elements_count"] = len(processed)
+        meta["stage_timings"] = timings
         return processed, meta
 
     def _extract_video(
@@ -294,7 +327,10 @@ class DocumentExtractor:
     ):
         """Extract a mono WAV track and visual frame samples from an uploaded video."""
         audio_output_path = storage_service.extracted_dir / document_id / "audio.wav"
+        parse_started = time.perf_counter()
         _, raw_elements, meta = video_parser.parse(file_path, audio_output_path)
+        timings = {"source_parse_seconds": round(time.perf_counter() - parse_started, 2)}
+        crops_started = time.perf_counter()
         processed: List[RawDocumentElement] = []
         for idx, elem in enumerate(raw_elements):
             element_id = f"elem_{document_id[:8]}_{elem.page}_{idx + 1}"
@@ -306,11 +342,14 @@ class DocumentExtractor:
                 except Exception as exc:
                     logger.warning("Could not persist video frame %s: %s", element_id, exc)
             processed.append(elem)
+        timings["visual_crop_persistence_seconds"] = round(time.perf_counter() - crops_started, 2)
         if unload_structure:
             pp_structure_analyzer.unload()
         if run_specialist_recognition:
-            recognition_coordinator.recognize(processed)
+            _, recognition_timings = recognition_coordinator.recognize_with_timings(processed)
+            timings.update(recognition_timings)
         meta["extracted_elements_count"] = len(processed)
+        meta["stage_timings"] = timings
         return processed, meta
 
     @staticmethod

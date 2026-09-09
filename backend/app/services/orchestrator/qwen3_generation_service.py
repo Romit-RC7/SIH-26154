@@ -48,6 +48,13 @@ class Qwen3GenerationService:
         if qwen_orchestrator_initializer.is_available():
             try:
                 model = qwen_orchestrator_initializer.load()
+                model_name = qwen_orchestrator_initializer.active_model_name
+                logger.info(
+                    "Qwen generation started | model=%s | output_type=%s | max_tokens=%d",
+                    model_name,
+                    output_type.value,
+                    tokens,
+                )
                 response = model.create_chat_completion(
                     messages=[
                         {"role": "system", "content": "You are a professional content generation AI. Output valid JSON strictly grounded in the given context. Return ONLY a valid JSON object. Do not include explanations, reasoning, markdown code fences, or <think> blocks."},
@@ -92,6 +99,13 @@ class Qwen3GenerationService:
                     "finish_reason": finish_reason,
                     "stop_reason": stop_reason,
                 }
+                logger.info(
+                    "Qwen generation completed | model=%s | output_type=%s | elapsed=%.2fs | finish_reason=%s",
+                    model_name,
+                    output_type.value,
+                    latency,
+                    finish_reason,
+                )
                 return raw_text, metadata
             except Exception as exc:
                 logger.error("Error during Qwen inference: %s. Falling back to structured simulation.", exc)

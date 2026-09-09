@@ -60,12 +60,13 @@ RUN sh -c ' \
         echo "FATAL: paddlepaddle-gpu could not be installed. Refusing to fall back to CPU in the GPU image." >&2; \
         exit 1'
 
-# Replace the CPU-only llama-cpp-python wheel (pulled by requirements.txt) with a CUDA-enabled build.
+# Install the CUDA-enabled llama-cpp-python wheel with normal pip resolution.
+# Do not uninstall the existing requirement first: it is unnecessary and creates
+# an additional Docker layer without reclaiming space from earlier layers.
 # The default PyPI wheel ships with no GPU kernels (llama_supports_gpu_offload() == False),
 # which silently ignores n_gpu_layers=-1 and forces Qwen3-4B/Qwen3-8B onto CPU.
 # No CPU fallback here either — fail the build if the CUDA wheel cannot be installed.
-RUN pip uninstall -y llama-cpp-python && \
-    sh -c ' \
+RUN sh -c ' \
         for i in 1 2 3; do \
             CMAKE_ARGS="-DGGML_CUDA=on" FORCE_CMAKE=1 \
             pip install --no-cache-dir  \

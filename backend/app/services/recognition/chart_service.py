@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import time
+import warnings
+
+from PIL import Image
 
 from backend.app.core.config import settings
 from backend.app.core.logging import logger
 from backend.app.processors.base import RawDocumentElement
 from backend.app.services.recognition.resource_manager import ModelResourceManager
+from backend.app.services.model_initializer import unichart_initializer
 
 
 class ChartRecognitionService:
@@ -24,7 +29,7 @@ class ChartRecognitionService:
         if not targets:
             return
         if not self._is_ready():
-            self._mark_unavailable(targets)
+            self._recognize_with_unichart(targets)
             return
 
         manager = ModelResourceManager(self._load_model, self.model_name)
@@ -63,6 +68,62 @@ class ChartRecognitionService:
         from paddlex import create_model
 
         return create_model(model_name=self.model_name, model_dir=str(self.model_dir))
+
+    def _recognize_with_unichart(self, targets: List[RawDocumentElement]) -> None:
+        """Use the staged UniChart weights when PP-Chart2Table is unavailable."""
+        if not unichart_initializer.is_available():
+            self._mark_unavailable(targets)
+            return
+        started = time.perf_counter()
+        try:
+            model, processor = unichart_initializer.load()
+            import torch
+            for element in targets:
+                image = element.image
+                if image is None:
+                    self._mark_error(element, "No chart crop available")
+                    continue
+                if not isinstance(image, Image.Image):
+                    image = Image.open(image).convert("RGB")
+                pixel_values = processor(image, return_tensors="pt").pixel_values.to(model.device)
+                decoder_input_ids = processor.tokenizer(
+                    "<extract_data_table> <s_answer>", add_special_tokens=False, return_tensors="pt"
+                ).input_ids.to(model.device)
+                with torch.inference_mode():
+                    # UniChart's saved generation config does not use beam
+                    # search, so `early_stopping` is ignored by Transformers.
+                    # Its legacy cache warning is emitted by this older model
+                    # implementation and does not affect output correctness.
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings(
+                            "ignore",
+                            message="Passing a tuple of `past_key_values` is deprecated.*",
+                        )
+                        output_ids = model.generate(
+                            pixel_values,
+                            decoder_input_ids=decoder_input_ids,
+                            max_length=model.decoder.config.max_position_embeddings,
+                            pad_token_id=processor.tokenizer.pad_token_id,
+                            eos_token_id=processor.tokenizer.eos_token_id,
+                            use_cache=True,
+                            num_beams=4,
+                            bad_words_ids=[[processor.tokenizer.unk_token_id]],
+                        )
+                sequence = processor.batch_decode(output_ids)[0]
+                sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
+                answer = sequence.split("<s_answer>", 1)[-1].strip()
+                if not answer or len(answer.split()) > 16 and len(set(answer.split())) <= 2:
+                    raise RuntimeError("UniChart returned an unusable chart extraction")
+                element.attributes["chart_recognition"] = {"answer": answer}
+                element.attributes["chart_recognition_model"] = "UniChart Base 960"
+                element.attributes["chart_recognition_status"] = "completed"
+            logger.info("Chart recognition fallback completed | model=UniChart Base 960 | charts=%d | elapsed=%.2fs", len(targets), time.perf_counter() - started)
+        except Exception as exc:
+            logger.warning("UniChart fallback unavailable: %s", exc)
+            for element in targets:
+                self._mark_error(element, str(exc))
+        finally:
+            unichart_initializer.unload()
 
     @staticmethod
     def _recognize_element(model: Any, element: RawDocumentElement) -> None:

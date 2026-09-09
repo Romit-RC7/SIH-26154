@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import gc
+import time
 from contextlib import contextmanager
 from typing import Any, Callable, Iterator, Optional
 
@@ -22,7 +23,13 @@ class ModelResourceManager:
     def loaded(self) -> Iterator[Any]:
         if self._model is None:
             logger.info("Loading offline recognition model: %s", self._name)
+            load_started = time.perf_counter()
             self._model = self._loader()
+            logger.info(
+                "Loaded offline recognition model: %s | elapsed=%.2fs",
+                self._name,
+                time.perf_counter() - load_started,
+            )
         try:
             yield self._model
         finally:

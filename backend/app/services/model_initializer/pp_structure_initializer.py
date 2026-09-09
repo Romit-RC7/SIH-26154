@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -95,6 +96,11 @@ class PPStructureInitializer:
             "text_recognition_model_dir": str(dirs["rec"]),
             "doc_orientation_classify_model_name": "PP-LCNet_x1_0_doc_ori",
             "doc_orientation_classify_model_dir": str(dirs["doc_ori"]),
+            # PP-Structure also creates a table-orientation classifier. It uses
+            # the same PP-LCNet weights, so explicitly reuse the staged local
+            # package instead of allowing PaddleX to resolve/download its default.
+            "table_orientation_classify_model_name": "PP-LCNet_x1_0_doc_ori",
+            "table_orientation_classify_model_dir": str(dirs["doc_ori"]),
 
             "textline_orientation_model_name": "PP-LCNet_x1_0_textline_ori",
             "textline_orientation_model_dir": str(dirs["textline_ori"]),
@@ -123,7 +129,9 @@ class PPStructureInitializer:
 
 
         logger.info("Loading offline PP-StructureV3 models from %s", self.models_root)
+        load_started = time.perf_counter()
         self.engine = PPStructureV3(**kwargs)
+        logger.info("Loaded PP-StructureV3 | device=%s | elapsed=%.2fs", device, time.perf_counter() - load_started)
         return self.engine
 
     def unload(self) -> None:
@@ -133,6 +141,16 @@ class PPStructureInitializer:
         if callable(close):
             close()
         self.engine = None
+        # PP-Structure runs before the Qwen vision stage. Reclaim Paddle's CUDA
+        # allocator cache here so the VLM has enough VRAM on 8 GB GPUs.
+        import gc
+        gc.collect()
+        try:
+            import paddle
+            if paddle.is_compiled_with_cuda():
+                paddle.device.cuda.empty_cache()
+        except Exception as exc:
+            logger.debug("Could not clear Paddle CUDA cache: %s", exc)
         logger.info("Unloaded offline PP-StructureV3 models")
 
 
