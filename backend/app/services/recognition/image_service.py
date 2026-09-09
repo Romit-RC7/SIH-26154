@@ -14,17 +14,19 @@ from PIL import Image
 from backend.app.core.logging import logger
 from backend.app.core.config import settings
 from backend.app.processors.base import RawDocumentElement
-from backend.app.services.model_initializer import qwen_vision_initializer
+from backend.app.services.model_initializer import qwen_vision_initializer, moondream_initializer
 from backend.app.services.recognition.resource_manager import ModelResourceManager
 
 
 class ImageRecognitionService:
-    """Describes figures/images using one local Qwen2.5-VL model stage."""
+    """Describes figures/images using pluggable local VLM engine (Qwen2.5-VL-3B or Moondream2-1.6B)."""
 
     model_name = "Qwen2.5-VL-3B"
 
     def recognize(self, elements: List[RawDocumentElement]) -> None:
-        # Do this check before loading Qwen: skip decorative icons, emojis, and duplicate logos
+        vlm_engine = getattr(settings, "VLM_ENGINE", "qwen2.5_vl").lower()
+
+        # Filter primary targets (skip decorative icons, emojis, and duplicate logos)
         targets = [
             element
             for element in elements
@@ -34,16 +36,23 @@ class ImageRecognitionService:
             and not element.attributes.get("is_duplicate", False)
         ]
         if not targets:
-            logger.info("Skipping Qwen vision stage: no primary image or figure crops in this batch")
+            logger.info("Skipping VLM vision stage: no primary image or figure crops in this batch")
             self._propagate_duplicate_analysis(elements)
             return
+
+        if vlm_engine == "moondream2":
+            self._recognize_moondream(targets, elements)
+        else:
+            self._recognize_qwen(targets, elements)
+
+    def _recognize_qwen(self, targets: List[RawDocumentElement], elements: List[RawDocumentElement]) -> None:
         if not qwen_vision_initializer.is_available():
-            self._mark_unavailable(targets)
+            self._mark_unavailable(targets, "Qwen2.5-VL-3B")
             return
 
         manager = ModelResourceManager(
             qwen_vision_initializer.load,
-            self.model_name,
+            "Qwen2.5-VL-3B",
             unloader=qwen_vision_initializer.unload,
         )
         try:
@@ -55,6 +64,60 @@ class ImageRecognitionService:
             logger.warning("Visual image recognition unavailable: %s", exc)
             for element in targets:
                 self._mark_error(element, str(exc))
+
+    def _recognize_moondream(self, targets: List[RawDocumentElement], elements: List[RawDocumentElement]) -> None:
+        if not moondream_initializer.is_available():
+            self._mark_unavailable(targets, "Moondream2-1.6B")
+            return
+
+        try:
+            model, tokenizer = moondream_initializer.load()
+            for element in targets:
+                self._recognize_element_moondream(model, tokenizer, element)
+            moondream_initializer.unload()
+            self._propagate_duplicate_analysis(elements)
+        except Exception as exc:
+            logger.warning("Moondream2 visual image recognition unavailable: %s", exc)
+            for element in targets:
+                self._mark_error(element, str(exc))
+
+    def _recognize_element_moondream(self, model: Any, tokenizer: Any, element: RawDocumentElement) -> None:
+        image = self._image_source(element)
+        if image is None:
+            self._mark_error(element, "No image crop available")
+            return
+
+        try:
+            encoded_image = model.encode_image(image)
+            description = model.answer_question(encoded_image, "Describe what is visible in this image objectively and concisely.", tokenizer)
+            visible_text_str = model.answer_question(encoded_image, "List any readable text in this image.", tokenizer)
+            vis_type_str = model.answer_question(encoded_image, "Is this visual a chart, diagram, meme, photograph, screenshot, or other?", tokenizer)
+
+            visible_text = [t.strip() for t in visible_text_str.split("\n") if t.strip()] if visible_text_str else []
+            vis_type = vis_type_str.strip().lower()
+
+            payload = {
+                "visual_type": vis_type if vis_type else "photograph",
+                "description": description.strip(),
+                "visible_text": visible_text,
+                "key_details": [description.strip()],
+                "core_concept_or_humor_theme": description.strip(),
+                "_raw_text": description.strip(),
+            }
+        except Exception as exc:
+            logger.warning("Error during Moondream2 vision inference: %s", exc)
+            payload = {"error": str(exc)}
+
+        element.attributes["visual_analysis"] = payload
+        element.attributes["visual_analysis_model"] = "Moondream2-1.6B"
+        element.attributes["visual_analysis_status"] = "completed"
+
+        if isinstance(payload, dict):
+            vt = str(payload.get("visual_type", "")).lower()
+            if "chart" in vt or "graph" in vt or "plot" in vt:
+                element.type = "chart"
+            elif "diagram" in vt or "flowchart" in vt:
+                element.type = "figure"
 
     def _propagate_duplicate_analysis(self, elements: List[RawDocumentElement]) -> None:
         primary_map = {}
@@ -100,47 +163,21 @@ class ImageRecognitionService:
             if ocr_text else ""
         )
         prompt = (
-            f"Inspect {subject} using ONLY the pixels visible in the provided image.\n\n"
-            "STRICT VISUAL GROUNDING RULES:\n"
-            "1. First determine what is actually visible in this specific image. "
-            "Do not guess what the image might represent from context or prior knowledge.\n"
-            "2. Identify the visual type conservatively. Choose the simplest accurate category "
-            "such as: person, natural_scenery, photograph, illustration, screenshot, diagram, "
-            "flowchart, technical_drawing, scientific_figure, chart, document, map, meme, "
-            "social_media_graphic, or other.\n"
-            "3. Describe ONLY objects, shapes, structures, people, text, and relationships that "
-            "are directly visible. Never invent details to make the description more complete.\n"
-            "4. If an object or detail is unclear, cropped, too small, or not visibly supported, "
-            "DO NOT identify or guess it.\n"
-            "5. Do not infer hidden context, location, purpose, identity, profession, software, "
-            "technology, materials, events, or causes unless they are explicitly visible.\n"
-            "6. Do not use generic descriptions learned from similar images. The description "
-            "must refer to THIS exact image.\n"
-            "7. For visible_text, include ONLY text that can actually be read in the image. "
-            "Never invent text. If no text is clearly readable, return an empty list.\n"
-            "8. For key_details, include only concrete visual characteristics that can be "
-            "verified directly from the image.\n"
-            "9. If the image does not contain enough information to answer something, leave it "
-            "out rather than guessing.\n"
-            "10. Before answering, internally check every claim: "
-            "\"Can I point to visible evidence for this claim in this image?\" "
-            "If not, remove the claim.\n"
-            "11. If the image is a meme, comic, or social media post: identify visual_type as 'meme' "
-            "or 'social_media_graphic'. Extract all overlay caption text into overlay_text. "
-            "In core_concept_or_humor_theme, describe the underlying subject, problem, or message "
-            "(e.g. 'Production outage during Friday deploy', 'Legacy code refactoring friction'). "
-            "For standard documents/diagrams, set overlay_text to [] and core_concept_or_humor_theme to null.\n\n"
+            "Inspect the image using ONLY the pixels visible in the provided image.\n\n"
+            "STRICT GROUNDING RULES:\n"
+            "1. Describe only what is directly visible. Do not guess, infer, assume, or add information not present.\n"
+            "2. Identify the visual category (e.g. natural_scenery, person, photograph, illustration, screenshot, diagram, chart, document, meme, social_media_graphic).\n"
+            "3. Extract only text that is actually visible. If no text is visible, return an empty list.\n"
+            "4. If the image is a meme or social media graphic, extract overlay text into 'overlay_text' and the theme/concept into 'core_concept_or_humor_theme'. Otherwise set overlay_text to [] and core_concept_or_humor_theme to null.\n"
             f"{ocr_evidence}\n"
-            "Return ONLY a valid JSON object. Do not include markdown, explanations, or text "
-            "outside the JSON.\n\n"
-            "Schema:\n"
+            "Return only a JSON object:\n\n"
             "{\n"
-            '  "visual_type": "<single conservative category>",\n'
-            '  "description": "<short objective description containing only directly visible information>",\n'
-            '  "visible_text": ["<only clearly readable text>"],\n'
-            '  "overlay_text": ["<extracted meme/graphic overlay text phrases>"],\n'
-            '  "core_concept_or_humor_theme": "<underlying subject or concept if meme/graphic, else null>",\n'
-            '  "key_details": ["<only directly observable visual details>"]\n'
+            '  "visual_type": "<detected category>",\n'
+            '  "description": "<short objective description containing only directly visible elements>",\n'
+            '  "visible_text": [],\n'
+            '  "overlay_text": [],\n'
+            '  "core_concept_or_humor_theme": null,\n'
+            '  "key_details": []\n'
             "}"
         )
         
@@ -150,12 +187,10 @@ class ImageRecognitionService:
                     {
                         "role": "system",
                         "content": (
-                            "You are a conservative visual inspection system. "
-                            "Your job is to report only evidence directly visible in the supplied image. "
-                            "Never guess, infer, complete, or embellish missing visual information. "
-                            "When uncertain, omit the claim rather than guessing. "
-                            "Do not rely on generic descriptions of similar images. "
-                            "Every statement in the output must be supported by visible pixels in THIS image."
+                            "You are a visual inspection system.\n"
+                            "Report only information directly visible in the image.\n"
+                            "Never guess, infer hidden context, or invent details.\n"
+                            "If uncertain, omit the information."
                         ),
                     },
                     {
@@ -271,11 +306,12 @@ class ImageRecognitionService:
                     pass
         return None
 
-    def _mark_unavailable(self, elements: List[RawDocumentElement]) -> None:
+    def _mark_unavailable(self, elements: List[RawDocumentElement], model_name: Optional[str] = None) -> None:
+        target_model = model_name or self.model_name
         for element in elements:
             element.attributes["visual_analysis_status"] = "unavailable"
-            element.attributes["visual_analysis_model"] = self.model_name
-            element.attributes["visual_analysis_error"] = "Local Qwen vision model or projector is unavailable"
+            element.attributes["visual_analysis_model"] = target_model
+            element.attributes["visual_analysis_error"] = f"Local VLM model ({target_model}) is unavailable"
 
     @staticmethod
     def _mark_error(element: RawDocumentElement, error: str) -> None:

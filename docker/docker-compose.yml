@@ -1,12 +1,12 @@
-version: "3.8"
 
 services:
-  # FastAPI Semantic Document Processing Backend (CPU - default)
+
+  # FastAPI Backend with GPU passthrough (activate with --profile gpu)
   backend:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: sih_backend
+    container_name: sih_backend_gpu
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -16,37 +16,7 @@ services:
         max-size: "10m"
         max-file: "3"
     environment:
-      - TZ=Asia/Kolkata
-      - ENVIRONMENT=development
-      - DEBUG=true
-      - POSTGRES_SERVER=db
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres_password
-      - POSTGRES_DB=sih_content_platform
-      - DOC_ANALYZER_ENGINE=pp_structure
-      - ENABLE_OCR=true
-      - MAX_UPLOAD_SIZE_MB=50
-      - PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
-    volumes:
-      - ../backend:/app/backend
-      - ../models:/app/models:ro
-      - ../uploads:/app/uploads
-      - ../scripts:/app/scripts:ro
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - sih_network
-
-  # FastAPI Backend with GPU passthrough (activate with --profile gpu)
-  backend-gpu:
-    extends:
-      service: backend
-    container_name: sih_backend_gpu
-    profiles:
-      - gpu
-    environment:
+      - HF_MODULES_CACHE=/tmp/huggingface/modules
       - TZ=Asia/Kolkata
       - ENVIRONMENT=development
       - DEBUG=true
@@ -62,6 +32,16 @@ services:
       - USE_GPU=true
       - FASTER_WHISPER_DEVICE=cuda
       - FASTER_WHISPER_COMPUTE_TYPE=float16
+    volumes:
+      - ../backend:/app/backend
+      - ../models:/app/models:ro
+      - ../uploads:/app/uploads
+      - ../scripts:/app/scripts:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - sih_network
     deploy:
       resources:
         reservations:

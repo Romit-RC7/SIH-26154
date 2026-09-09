@@ -43,7 +43,7 @@ models/
 *.onnx
 
 scripts/
-*.py
+
 
 wheels/
 *.whl

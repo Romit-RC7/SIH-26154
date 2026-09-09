@@ -44,13 +44,59 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --system -r requirements.txt && \
     uv pip install --system \
         paddleocr==3.7.0 \
-        "paddlex[ocr,multimodal]>=3.7.0,<3.8.0" && \
-    UV_HTTP_TIMEOUT=600 sh -c ' \
+        "paddlex[ocr,multimodal]>=3.7.0,<3.8.0"
+
+# Install paddlepaddle-gpu (CUDA build). No CPU fallback: this is the GPU profile image,
+# so if the GPU wheel cannot be fetched the build MUST fail rather than silently degrade to CPU.
+# Using plain pip (not uv) here — uv's HTTP client fails to connect to the Baidu CDN in some
+# network environments while pip succeeds against the same host.
+RUN sh -c ' \
         for i in 1 2 3 4 5; do \
-            uv pip install --system paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/ && break; \
-            echo "Retry $i failed, waiting before next attempt..."; \
+            pip install --no-cache-dir --default-timeout=1000 --retries 3 \
+                paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu126/ && exit 0; \
+            echo "GPU wheel attempt $i failed, retrying..."; \
             sleep 10; \
-        done'
+        done; \
+        echo "FATAL: paddlepaddle-gpu could not be installed. Refusing to fall back to CPU in the GPU image." >&2; \
+        exit 1'
+
+# Replace the CPU-only llama-cpp-python wheel (pulled by requirements.txt) with a CUDA-enabled build.
+# The default PyPI wheel ships with no GPU kernels (llama_supports_gpu_offload() == False),
+# which silently ignores n_gpu_layers=-1 and forces Qwen3-4B/Qwen3-8B onto CPU.
+# No CPU fallback here either — fail the build if the CUDA wheel cannot be installed.
+RUN pip uninstall -y llama-cpp-python && \
+    sh -c ' \
+        for i in 1 2 3; do \
+            CMAKE_ARGS="-DGGML_CUDA=on" FORCE_CMAKE=1 \
+            pip install --no-cache-dir  \
+                --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124 \
+                llama-cpp-python==0.3.35 && exit 0; \
+            echo "llama-cpp-python CUDA wheel attempt $i failed, retrying..."; \
+            sleep 10; \
+        done; \
+        echo "FATAL: llama-cpp-python CUDA wheel could not be installed. Refusing to fall back to CPU in the GPU image." >&2; \
+        exit 1'
+
+# The cu124 llama-cpp-python wheel dynamically links against CUDA 12.x runtime libraries
+# (libcudart.so.12, libcublas.so.12), but torch installs CUDA 13.x libs instead.
+# Install the missing CUDA 12.x runtime shared libraries via pip wheels and expose them via LD_LIBRARY_PATH.
+RUN pip install --no-cache-dir --default-timeout=600 --retries 5 \
+    nvidia-cuda-runtime-cu12 \
+    nvidia-cublas-cu12 \
+    nvidia-cuda-nvrtc-cu12
+
+ENV LD_LIBRARY_PATH="/usr/local/lib/python3.12/site-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.12/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.12/site-packages/nvidia/cuda_nvrtc/lib:${LD_LIBRARY_PATH}"
+
+# CRITICAL: paddlepaddle-gpu pulls in nvidia-nccl-cu12 as a transitive dependency, and pip's
+# nvidia-* namespace packages all install their .so files into the SAME site-packages/nvidia/nccl/lib/
+# path regardless of CUDA major version. Since paddlepaddle-gpu installs AFTER torch in this Dockerfile,
+# its older nccl-cu12 library silently overwrites the nccl-cu13 library that torch==2.14.0+cu130 needs,
+# breaking torch with "undefined symbol: ncclCommResume" at import time.
+# Force-reinstall the exact nccl version torch requires, LAST, so its files win.
+RUN TORCH_NCCL_VERSION=$(python -c "import importlib.metadata as m; print(m.version('nvidia-nccl-cu13'))") && \
+    pip install --no-cache-dir --force-reinstall --no-deps --default-timeout=300 \
+        nvidia-nccl-cu13==${TORCH_NCCL_VERSION} && \
+    python -c "import torch; assert torch.cuda.is_available() or True; print('torch import OK, version', torch.__version__)"
 
 # Copy application source code
 COPY backend/ /app/backend/

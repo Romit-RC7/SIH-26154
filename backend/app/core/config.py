@@ -114,6 +114,10 @@ class Settings(BaseSettings):
     }
 
     # LLM & Vision Model Configuration
+    # Options for VLM_ENGINE: "qwen2.5_vl" (Default Qwen2.5-VL-3B Q4) or "moondream2" (Moondream2 1.6B VLM)
+    VLM_ENGINE: str = "moondream2"
+    MOONDREAM_MODEL_DIR: Path = MODELS_DIR / "moondream2"
+    HF_MODULES_CACHE: Path = Path("/tmp/huggingface/modules")
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:latest"
     QWEN_VISION_N_CTX: int = 4096

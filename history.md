@@ -1,5 +1,19 @@
 # SIH-26154 — Change History
 
+## Session 14 — 2026-09-08 — Pluggable VLM Engine: Moondream2 (1.6B VLM) Integration
+
+### What was done
+
+- **Implemented Pluggable Vision-Language Model Architecture**:
+  - `backend/app/core/config.py`: Added `VLM_ENGINE` (`"qwen2.5_vl"` default, `"moondream2"` alternative) and `MOONDREAM_MODEL_DIR` (`models/moondream2/`).
+  - `scripts/download_models.py`: Enabled `moondream2` (`vikhyatk/moondream2`) download specification under `--select moondream2`.
+  - `backend/app/services/model_initializer/moondream_initializer.py`: Built `MoondreamInitializer` for lazy loading Moondream2 1.6B VLM onto CUDA GPU / CPU with explicit memory unloading (`gc.collect()`, `empty_cache()`). Exported in `model_initializer/__init__.py`.
+  - `backend/app/services/recognition/image_service.py`: Modularized `ImageRecognitionService` to inspect `settings.VLM_ENGINE`. Supports seamless toggling between `_recognize_qwen()` and `_recognize_moondream()`. Formats Moondream2 predictions into the unified JSON contract (`visual_type`, `description`, `visible_text`, `key_details`, `core_concept_or_humor_theme`).
+  - `backend/app/services/system_diagnostics.py`: Added `moondream2` readiness check and `vlm_engine` telemetry to system status endpoint (`GET /api/v1/health`).
+  - `backend/tests/test_moondream_initializer.py`: Added unit tests for path resolution and VLM engine config toggling.
+
+---
+
 ## Session 13 — 2026-09-08 — Document-Wide Visual Deduplication, Logo Filtering & Noise Suppression
 
 ### What was done

@@ -25,6 +25,10 @@ from backend.app.services.model_initializer.bge_initializer import (
     BGEModelInitializer,
     bge_initializer,
 )
+from backend.app.services.model_initializer.moondream_initializer import (
+    MoondreamInitializer,
+    moondream_initializer,
+)
 
 __all__ = [
     "QwenFusionInitializer",
@@ -42,4 +46,6 @@ __all__ = [
     "faster_whisper_initializer",
     "BGEModelInitializer",
     "bge_initializer",
+    "MoondreamInitializer",
+    "moondream_initializer",
 ]
