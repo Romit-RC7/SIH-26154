@@ -66,6 +66,8 @@ class OrchestratorService:
 
         # 2. Sequential generation for each selected output format
         artefacts: List[GeneratedArtefact] = []
+        is_debug = bool(getattr(request, "debug_mode", False))
+
         for out_type in output_types:
             logger.info("Generating deliverable artefact for format: %s", out_type.value)
             
@@ -75,7 +77,7 @@ class OrchestratorService:
 
             raw_text, meta = qwen3_generation_service.generate(prompt, out_type)
             status, content_dict, diagnostics = response_parser.parse_response(
-                raw_text, out_type, kp, return_diagnostics=True
+                raw_text, out_type, kp, return_diagnostics=True, debug_mode=is_debug
             )
             meta.update(diagnostics)
 
@@ -97,6 +99,7 @@ class OrchestratorService:
                 artefact.generation_metadata["trust_score"] = verified.validation_report.trust_score
                 artefact.generation_metadata["original_trust_score"] = verified.validation_report.original_trust_score
                 artefact.generation_metadata["repaired_trust_score"] = verified.validation_report.repaired_trust_score
+                artefact.generation_metadata["trust_penalties"] = verified.validation_report.trust_penalties
                 artefact.generation_metadata["schema_compliance"] = verified.validation_report.schema_compliance
                 artefact.generation_metadata["violations"] = verified.validation_report.violations
                 artefact.generation_metadata["repair_attempts"] = verified.validation_report.repair_attempts

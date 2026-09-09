@@ -45,6 +45,7 @@ class QwenModelInitializer:
         logger.info("Loading local Qwen model: %s (n_gpu_layers=%s)", model_path, settings.N_GPU_LAYERS)
         self.model = Llama(
             model_path=str(model_path),
+            chat_format="chatml",
             n_ctx=self.n_ctx,
             n_gpu_layers=settings.N_GPU_LAYERS,
             verbose=False,
@@ -196,6 +197,7 @@ class QwenOrchestratorInitializer(QwenModelInitializer):
         try:
             self.model = Llama(
                 model_path=str(model_path),
+                chat_format="chatml",
                 n_ctx=self.n_ctx,
                 n_gpu_layers=n_gpu_layers,
                 verbose=False,
@@ -205,6 +207,7 @@ class QwenOrchestratorInitializer(QwenModelInitializer):
                 logger.warning("Failed to load on GPU (%s); attempting fallback on CPU...", exc)
                 self.model = Llama(
                     model_path=str(model_path),
+                    chat_format="chatml",
                     n_ctx=self.n_ctx,
                     n_gpu_layers=0,
                     verbose=False,

@@ -143,6 +143,10 @@ class GenerateRequest(BaseModel):
     )
     focus_keywords: List[str] = Field(default_factory=list, description="Prioritized entities or themes")
     custom_instructions: Optional[str] = Field(default=None, description="Custom guidelines or stylistic constraints")
+    debug_mode: Optional[bool] = Field(
+        default=False,
+        description="When True, disables deterministic fallback and surfaces raw parse failures for debugging"
+    )
 
 
 class GenerateResponse(BaseModel):

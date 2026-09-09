@@ -47,9 +47,14 @@ class ImageRecognitionService:
         try:
             with manager.loaded() as model:
                 for element in targets:
-                    self._recognize_element(model, element)
-        except Exception as exc:
-            logger.warning("Visual image recognition unavailable: %s", exc)
+                    try:
+                        self._recognize_element(model, element)
+                    except BaseException as elem_exc:
+                        elem_id = element.attributes.get("element_id", "unknown")
+                        logger.error("Visual element recognition failed on %s: %s", elem_id, elem_exc)
+                        self._mark_error(element, str(elem_exc))
+        except BaseException as exc:
+            logger.warning("Visual image recognition stage failed: %s", exc)
             for element in targets:
                 self._mark_error(element, str(exc))
 

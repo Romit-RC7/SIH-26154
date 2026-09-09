@@ -4,7 +4,7 @@ Data contract output from the Knowledge Engine (Qwen3-4B), designed specifically
 for direct consumption by the Content Orchestrator and Generative LLM pipeline.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal
 from pydantic import BaseModel, Field
 from backend.app.schemas.intent import IntentAndPersonalization
 from backend.app.schemas.semantic_document import EntityItem, ClaimItem, RelationshipItem
@@ -25,6 +25,8 @@ class KeyMetricItem(BaseModel):
     label: str = Field(..., description="Description of the metric (e.g., 'Revenue Growth', 'Model Accuracy')")
     value: str = Field(..., description="Formatted value (e.g., '+24.5%', '99.4% F1')")
     context: Optional[str] = Field(default=None, description="Qualifying context or comparison")
+    unit: Optional[str] = Field(default=None, description="Metric unit (e.g. '%', '$', 'x', 'ms')")
+    comparison: Optional[str] = Field(default=None, description="Comparative benchmark (e.g. 'vs $12B in 2022')")
     source_element_id: Optional[str] = Field(default=None, description="Evidence element ID")
     page: Optional[int] = Field(default=None, description="Page number")
 
@@ -39,13 +41,52 @@ class TableSummaryItem(BaseModel):
 
 
 class VisualInsightItem(BaseModel):
-    """Visual asset analysis and key takeaway."""
+    """Visual asset analysis and key takeaway across charts, diagrams, and memes."""
     element_id: str = Field(..., description="Element ID of the chart/diagram/image")
     page: int = Field(..., ge=1)
-    element_type: str = Field(..., description="figure, chart, or image")
+    element_type: str = Field(..., description="figure, chart, image, diagram, or meme")
     caption: Optional[str] = Field(default=None)
     image_path: Optional[str] = Field(default=None, description="Relative path to cropped visual asset")
     takeaway: str = Field(..., description="Descriptive summary or trend takeaway")
+    visual_category: Optional[str] = Field(default=None, description="Category: chart, architecture, meme, photo")
+    actionable_takeaway: Optional[str] = Field(default=None, description="Actionable implication for generation")
+    key_data_points: List[str] = Field(default_factory=list, description="Extracted numbers or visual callouts")
+
+
+class ExecutiveInsightItem(BaseModel):
+    """Synthesized high-level strategic takeaway or executive-level conclusion."""
+    headline: str = Field(..., description="High-impact concise summary statement")
+    takeaway: str = Field(..., description="Deep synthesis of the insight and why it matters")
+    implications: Optional[str] = Field(default=None, description="Strategic, operational, or broader implications")
+    source_element_ids: List[str] = Field(default_factory=list, description="Associated source element IDs")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class KeyFindingItem(BaseModel):
+    """Document-grounded factual discovery, empirical result, or core observation."""
+    finding: str = Field(..., description="Specific finding extracted from the document")
+    evidence_snippet: Optional[str] = Field(default=None, description="Supporting verbatim phrase or data point")
+    source_element_ids: List[str] = Field(default_factory=list, description="Associated source element IDs")
+    page: Optional[int] = Field(default=None, description="Page number of primary finding")
+    significance: Optional[str] = Field(default=None, description="Why this finding is notable")
+
+
+class RecommendationItem(BaseModel):
+    """Actionable recommendation, guidance, or next step derived from findings."""
+    action: str = Field(..., description="Specific recommended action or posture")
+    rationale: Optional[str] = Field(default=None, description="Underlying justification grounded in document evidence")
+    priority: Optional[str] = Field(default="medium", description="Priority or horizon (high, medium, low, strategic)")
+    target_role: Optional[str] = Field(default=None, description="Applicable role, persona, or stakeholder group")
+    source_element_ids: List[str] = Field(default_factory=list, description="Associated source element IDs")
+
+
+class RiskOrOpportunityItem(BaseModel):
+    """Identified risk, vulnerability, friction point, or strategic opportunity."""
+    kind: Literal["risk", "opportunity"] = Field(..., description="Classification: 'risk' or 'opportunity'")
+    title: str = Field(..., description="Concise label of the risk or opportunity")
+    description: str = Field(..., description="Detailed explanation grounded in the text")
+    impact_level: Optional[str] = Field(default=None, description="Assessment of impact: critical, high, medium, low")
+    source_element_ids: List[str] = Field(default_factory=list, description="Associated source element IDs")
 
 
 class ContentStrategy(BaseModel):
@@ -67,6 +108,10 @@ class KnowledgePackage(BaseModel):
     document_id: str = Field(..., description="Target document ID")
     document_title: Optional[str] = Field(default=None, description="Document title or filename")
     intent: IntentAndPersonalization = Field(..., description="User intent and persona configuration")
+    document_story: str = Field(
+        default="",
+        description="Executive-grade narrative summary (150-300 words) capturing scope, findings, metrics, and recommendations"
+    )
     
     # Retrieved & Structured Semantic Context
     retrieved_evidence: List[EvidenceItem] = Field(
@@ -98,6 +143,24 @@ class KnowledgePackage(BaseModel):
         description="Visual assets (charts/diagrams) and their interpretations"
     )
     
+    # Synthesized High-Level Intelligence
+    executive_insights: List[ExecutiveInsightItem] = Field(
+        default_factory=list,
+        description="Synthesized strategic insights connecting multiple document findings"
+    )
+    key_findings: List[KeyFindingItem] = Field(
+        default_factory=list,
+        description="Core empirical and document-grounded findings"
+    )
+    recommendations: List[RecommendationItem] = Field(
+        default_factory=list,
+        description="Document-derived actionable recommendations and next steps"
+    )
+    risks_and_opportunities: List[RiskOrOpportunityItem] = Field(
+        default_factory=list,
+        description="Documented risks, vulnerabilities, and growth/optimization opportunities"
+    )
+
     # LLM Synthesis & Strategic Blueprint
     strategy: ContentStrategy = Field(
         ...,

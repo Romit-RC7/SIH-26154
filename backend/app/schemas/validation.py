@@ -30,6 +30,7 @@ class ValidationReport(BaseModel):
     repaired_trust_score: Optional[float] = Field(default=None, description="Trust score calculated on repaired artefact if repair was performed")
     repaired: bool = Field(default=False, description="True if automatic repair was executed")
     repair_attempts: int = Field(default=0, description="Number of repair iterations executed")
+    trust_penalties: Dict[str, float] = Field(default_factory=dict, description="Itemized trust score deductions")
 
 
 class VerifiedArtefact(BaseModel):

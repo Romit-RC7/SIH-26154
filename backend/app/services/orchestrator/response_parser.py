@@ -33,6 +33,7 @@ class ResponseParser:
     with reasoning removal (<think>...</think>), multi-tier JSON recovery, and diagnostics.
     """
 
+    debug_mode: bool = False
     last_diagnostics: Dict[str, Any] = {}
 
     @staticmethod
@@ -56,20 +57,27 @@ class ResponseParser:
         output_type: OutputType,
         kp: KnowledgePackage,
         return_diagnostics: bool = False,
+        debug_mode: Optional[bool] = None,
+        raise_on_error: bool = False,
     ) -> Any:
         """
         Parses raw LLM string into a validated dictionary matching output_type schema.
         Returns (status, content_dict) or (status, content_dict, diagnostics).
+        If debug_mode is True, deterministic fallback is disabled and raw parse failures are surfaced.
         """
+        is_debug = ResponseParser.debug_mode if debug_mode is None else debug_mode
         raw_len = len(raw_output) if raw_output else 0
         cleaned_text = ResponseParser.strip_reasoning(raw_output)
         clean_len = len(cleaned_text)
+        has_reasoning = bool(raw_output and ("<think>" in raw_output.lower() or "</think>" in raw_output.lower()))
 
         diagnostics: Dict[str, Any] = {
             "raw_output_length": raw_len,
             "cleaned_output_length": clean_len,
+            "reasoning_detected": has_reasoning,
             "json_extracted": False,
             "parse_failure_reason": None,
+            "fallback_disabled": is_debug,
             "repair_attempts": 0,
         }
 
@@ -94,10 +102,32 @@ class ResponseParser:
                     return "success", extracted_json, diagnostics
                 return "success", extracted_json
 
-        # Fallback if raw text wasn't valid JSON
+        # Fallback or Raw Parse Failure surfacing if raw text wasn't valid JSON
         diagnostics["json_extracted"] = False
         diagnostics["parse_failure_reason"] = failure_reason or "No valid JSON object could be extracted"
         ResponseParser.last_diagnostics = diagnostics
+
+        if is_debug:
+            diagnostics["fallback_disabled"] = True
+            diagnostics["raw_parse_failure"] = diagnostics["parse_failure_reason"]
+            logger.error(
+                "Debug mode active: deterministic fallback disabled. Raw parse failure for %s: %s",
+                output_type.value,
+                diagnostics["parse_failure_reason"],
+            )
+            if raise_on_error:
+                raise ValueError(
+                    f"Raw parse failure for {output_type.value}: {diagnostics['parse_failure_reason']}\n"
+                    f"Raw output:\n{raw_output}"
+                )
+            error_content = {
+                "error": diagnostics["parse_failure_reason"],
+                "raw_output": raw_output,
+                "parse_failure_reason": diagnostics["parse_failure_reason"],
+            }
+            if return_diagnostics:
+                return "parse_error", error_content, diagnostics
+            return "parse_error", error_content
 
         logger.warning(
             "Could not parse JSON from LLM output for %s: %s. Generating structured deterministic fallback.",

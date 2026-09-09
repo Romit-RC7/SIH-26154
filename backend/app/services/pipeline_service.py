@@ -257,22 +257,27 @@ class DocumentPipelineService:
 
             await session.commit()
             logger.info("Completed recognition batch of %d documents", len(documents))
-        except Exception as exc:
+        except BaseException as exc:
             logger.exception("Recognition batch failed: %s", exc)
-            await session.rollback()
-            for document_id, job_id in jobs:
-                doc_query = await session.execute(select(Document).where(Document.id == document_id))
-                doc = doc_query.scalar_one_or_none()
-                job_query = await session.execute(select(ProcessingJob).where(ProcessingJob.id == job_id))
-                job = job_query.scalar_one_or_none()
-                if doc:
-                    doc.status = DocumentStatus.FAILED
-                if job:
-                    job.status = JobStatus.FAILED
-                    job.step = PipelineStep.FAILED
-                    job.error_message = str(exc)
-                    job.completed_at = datetime.now(timezone.utc)
-            await session.commit()
+            try:
+                await session.rollback()
+                for document_id, job_id in jobs:
+                    doc_query = await session.execute(select(Document).where(Document.id == document_id))
+                    doc = doc_query.scalar_one_or_none()
+                    job_query = await session.execute(select(ProcessingJob).where(ProcessingJob.id == job_id))
+                    job = job_query.scalar_one_or_none()
+                    if doc:
+                        doc.status = DocumentStatus.FAILED
+                    if job:
+                        job.status = JobStatus.FAILED
+                        job.step = PipelineStep.FAILED
+                        job.error_message = str(exc)
+                        job.completed_at = datetime.now(timezone.utc)
+                await session.commit()
+            except Exception as rollback_exc:
+                logger.error("Failed to mark documents/jobs as FAILED after batch failure: %s", rollback_exc)
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise exc
 
     async def _persist_semantic_document(self, session, doc, job, semantic_doc) -> None:
         doc.semantic_json = semantic_doc.model_dump(mode="json")

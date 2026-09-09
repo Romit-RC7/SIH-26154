@@ -17,7 +17,7 @@ class Qwen3GenerationService:
     """
 
     FORMAT_HYPERPARAMS: Dict[OutputType, Dict[str, Any]] = {
-        OutputType.LINKEDIN_POST: {"temperature": 0.7, "max_tokens": 600},
+        OutputType.LINKEDIN_POST: {"temperature": 0.2, "max_tokens": 1200},
         OutputType.TWITTER_THREAD: {"temperature": 0.6, "max_tokens": 800},
         OutputType.EXECUTIVE_SUMMARY: {"temperature": 0.3, "max_tokens": 1600},
         OutputType.PRESENTATION_DECK: {"temperature": 0.4, "max_tokens": 2048},
@@ -55,11 +55,33 @@ class Qwen3GenerationService:
                     ],
                     temperature=temp,
                     max_tokens=tokens,
+                    response_format={"type": "json_object"},
+                    stop=["<|im_end|>", "<|endoftext|>", "<|im_start|>"],
                 )
-                raw_text = response["choices"][0]["message"]["content"]
+                choice = response["choices"][0]
+                raw_text = choice["message"]["content"]
+                finish_reason = choice.get("finish_reason", "unknown")
                 usage = response.get("usage", {})
                 latency = round(time.time() - start_time, 2)
-                
+
+                # Classify stop reason: 'stop token', 'max_tokens', 'EOS'
+                if finish_reason == "length":
+                    stop_reason = "max_tokens"
+                    logger.warning(
+                        "Qwen generation truncated due to reaching max_tokens (%d) for %s (finish_reason='length')",
+                        tokens,
+                        output_type.value,
+                    )
+                elif finish_reason == "eos":
+                    stop_reason = "EOS"
+                    logger.info("Qwen generation ended with EOS for %s", output_type.value)
+                elif finish_reason == "stop":
+                    stop_reason = "stop token"
+                    logger.info("Qwen generation stopped on stop token for %s", output_type.value)
+                else:
+                    stop_reason = str(finish_reason)
+                    logger.info("Qwen generation finished for %s with finish_reason: %s", output_type.value, finish_reason)
+
                 metadata = {
                     "model": model_name,
                     "latency_seconds": latency,
@@ -67,6 +89,8 @@ class Qwen3GenerationService:
                     "completion_tokens": usage.get("completion_tokens", 0),
                     "temperature": temp,
                     "backend": "llama-cpp-python",
+                    "finish_reason": finish_reason,
+                    "stop_reason": stop_reason,
                 }
                 return raw_text, metadata
             except Exception as exc:
@@ -81,6 +105,8 @@ class Qwen3GenerationService:
             "completion_tokens": 0,
             "temperature": temp,
             "backend": "offline_fallback",
+            "finish_reason": "stop",
+            "stop_reason": "stop token",
         }
         return "", metadata
 

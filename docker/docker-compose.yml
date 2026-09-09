@@ -28,6 +28,7 @@ services:
       - ENABLE_OCR=true
       - MAX_UPLOAD_SIZE_MB=50
       - PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
+    command: ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "backend/app", "--reload-exclude", "uploads/*", "--reload-exclude", "backend/tests/*"]
     volumes:
       - ../backend:/app/backend
       - ../models:/app/models:ro

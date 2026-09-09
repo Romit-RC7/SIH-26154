@@ -25,8 +25,40 @@ async def lifespan(app: FastAPI):
     try:
         await init_db()
         logger.info("Database schema initialized successfully.")
+
+        # Startup recovery: reset any documents/jobs orphaned in PROCESSING due to previous worker crash
+        from backend.app.database.session import AsyncSessionLocal
+        from backend.app.models.document import Document, DocumentStatus
+        from backend.app.models.processing_job import ProcessingJob, JobStatus, PipelineStep
+        from sqlalchemy import update
+        from datetime import datetime, timezone
+
+        async with AsyncSessionLocal() as recovery_session:
+            now = datetime.now(timezone.utc)
+            doc_update = await recovery_session.execute(
+                update(Document)
+                .where(Document.status == DocumentStatus.PROCESSING)
+                .values(status=DocumentStatus.FAILED)
+            )
+            job_update = await recovery_session.execute(
+                update(ProcessingJob)
+                .where(ProcessingJob.status.in_([JobStatus.PROCESSING, JobStatus.QUEUED]))
+                .values(
+                    status=JobStatus.FAILED,
+                    step=PipelineStep.FAILED,
+                    error_message="Worker terminated unexpectedly during processing (server restarted/interrupted).",
+                    completed_at=now,
+                )
+            )
+            await recovery_session.commit()
+            if doc_update.rowcount > 0 or job_update.rowcount > 0:
+                logger.warning(
+                    "Startup recovery cleaned up %d orphaned document(s) and %d job(s) from previous interrupted run.",
+                    doc_update.rowcount,
+                    job_update.rowcount,
+                )
     except Exception as e:
-        logger.warning(f"Database initialization warning (will retry on requests): {e}")
+        logger.warning(f"Database initialization / recovery warning (will retry on requests): {e}")
 
     yield
 
