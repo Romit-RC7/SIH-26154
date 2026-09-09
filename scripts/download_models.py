@@ -14,10 +14,26 @@ Target Model Directory Layout:
 """
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+# Load .env file for HF authentication token (TOCKEN / HF_TOKEN)
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path)
+except ImportError:
+    pass
+
+HF_TOKEN = os.getenv("TOCKEN") or os.getenv("TOKEN") or os.getenv("HF_TOKEN")
+if HF_TOKEN:
+    # Export for huggingface_hub C++ / subprocess operations as well
+    os.environ["HF_TOKEN"] = HF_TOKEN
+    os.environ["HUGGING_FACE_HUB_TOKEN"] = HF_TOKEN
 
 # ==============================================================================
 # Hugging Face Model Specifications
@@ -54,7 +70,37 @@ HF_MODELS = {
         "target_dir": "bge_small_en_v1.5",
         "description": "BGE-small-en-v1.5 (High-Speed Embeddings for pgvector)",
     },
-}
+    "faster_whisper": {
+        "repo_id": "Systran/faster-whisper-small",
+        "patterns": None,
+        "target_dir": "faster_whisper_small",
+        "description": "Faster-Whisper Small (offline speech-to-text)",
+    },
+    }
+    # "moondream2": {
+    #     "repo_id": "vikhyatk/moondream2",
+    #     "patterns": None,
+    #     "target_dir": "moondream2",
+    #     "description": "Moondream2 (Lightweight 1.6B Vision-Language Model)",
+    # "blip2_2.7b": {
+    #     "repo_id": "Salesforce/blip2-opt-2.7b",
+    #     "patterns": None,
+    #     "target_dir": "blip2_2.7b",
+    #     "description": "BLIP-2 OPT-2.7B (Open Multimodal Vision-Language Model)",
+    # },
+    # "paligemma_3b": {
+    #     "repo_id": "google/paligemma-3b-pt-224",
+    #     "patterns": None,
+    #     "target_dir": "paligemma_3b",
+    #     "description": "PaliGemma-3B (Google DeepMind 3B Multimodal VQA Model, requires HF_TOKEN / TOCKEN)",
+    # },
+    # "llava_1.5_7b": {
+    #     "repo_id": "mys/ggml_llava-v1.5-7b",
+    #     "patterns": ["*q4_k.gguf", "*Q4_K.gguf", "*mmproj*.gguf"],
+    #     "target_dir": "llava_1.5_7b_q4",
+    #     "description": "LLaVA-v1.5-7B GGUF (Native llama-cpp Multimodal Model)",
+    # }
+
 
 # ---------------------------------------------------------------------------
 # PP-StructureV3 components — downloaded from official HuggingFace repos.
@@ -112,6 +158,16 @@ PP_STRUCTURE_HF = {
         "dir_name": "formula",
         "description": "PP-FormulaNet_plus-M mathematical formula recognition model",
     },
+    "doc_ori": {
+        "repo_id": "PaddlePaddle/PP-LCNet_x1_0_doc_ori",
+        "dir_name": "doc_ori",
+        "description": "PP-LCNet document orientation classification model",
+    },
+    "textline_ori": {
+        "repo_id": "PaddlePaddle/PP-LCNet_x1_0_textline_ori",
+        "dir_name": "textline_ori",
+        "description": "PP-LCNet text line orientation classification model",
+    },
 }
 
 
@@ -138,7 +194,7 @@ def run_hf_download(
         is_complete = all((target_dir / name).exists() for name in required_files)
     else:
         is_complete = any(
-            target_dir.glob(pattern)
+            bool(list(target_dir.glob(pattern)))
             for pattern in ("*.gguf", "*.safetensors", "*.bin", "*.pdiparams", "*.pdmodel")
         )
     if is_complete:
@@ -150,11 +206,15 @@ def run_hf_download(
         from huggingface_hub import snapshot_download
         print(f"[*] Using huggingface_hub Python API to fetch '{repo_id}'...")
 
+        if HF_TOKEN:
+            print(f"[*] Authenticating with HuggingFace Token (length={len(HF_TOKEN)})...")
+
         snapshot_download(
             repo_id=repo_id,
             local_dir=str(target_dir),
             allow_patterns=patterns,
             ignore_patterns=["*.msgpack", "*.h5", "*.ot"],
+            token=HF_TOKEN,
         )
         print(f"[+] Snapshot complete for {repo_id} -> {target_dir}")
         return
@@ -171,6 +231,8 @@ def run_hf_download(
         return
 
     cmd = [hf_binary, "download", repo_id, "--local-dir", str(target_dir)]
+    if HF_TOKEN:
+        cmd.extend(["--token", HF_TOKEN])
     if patterns:
         for p in patterns:
             cmd.extend(["--include", p])
@@ -265,7 +327,20 @@ def main():
     parser.add_argument(
         "--select",
         nargs="+",
-        choices=["all", "pp_structure", "unichart", "qwen2.5_vl", "qwen3_4b", "qwen3_8b", "bge"],
+        choices=[
+            "all",
+            "pp_structure",
+            "unichart",
+            "qwen2.5_vl",
+            "qwen3_4b",
+            "qwen3_8b",
+            "bge",
+            "faster_whisper",
+            "moondream2",
+            "blip2_2.7b",
+            "paligemma_3b",
+            "llava_1.5_7b",
+        ],
         default=["all"],
         help="Select specific models to download.",
     )
@@ -288,7 +363,20 @@ def main():
         download_pp_structure(models_dir)
 
     # 2. Download Hugging Face Models
-    hf_keys = [k for k in ["unichart", "qwen2.5_vl", "qwen3_4b", "qwen3_8b", "bge"] if download_all or k in selected]
+    hf_keys = [
+        k for k in [
+            "unichart",
+            "qwen2.5_vl",
+            "qwen3_4b",
+            "qwen3_8b",
+            "bge",
+            "faster_whisper",
+            "moondream2",
+            "blip2_2.7b",
+            "paligemma_3b",
+            "llava_1.5_7b",
+        ] if download_all or k in selected
+    ]
 
     if hf_keys:
         for key in hf_keys:
