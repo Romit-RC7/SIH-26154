@@ -26,8 +26,11 @@ class ValidationReport(BaseModel):
     schema_compliance: bool = Field(..., description="True if format rules are fully met")
     claim_verifications: List[ClaimVerification] = Field(default_factory=list, description="Claim-by-claim analysis")
     violations: List[str] = Field(default_factory=list, description="Format rule violations detected")
+    original_trust_score: Optional[float] = Field(default=None, description="Trust score calculated on original LLM output")
+    repaired_trust_score: Optional[float] = Field(default=None, description="Trust score calculated on repaired artefact if repair was performed")
     repaired: bool = Field(default=False, description="True if automatic repair was executed")
     repair_attempts: int = Field(default=0, description="Number of repair iterations executed")
+    trust_penalties: Dict[str, float] = Field(default_factory=dict, description="Itemized trust score deductions")
 
 
 class VerifiedArtefact(BaseModel):

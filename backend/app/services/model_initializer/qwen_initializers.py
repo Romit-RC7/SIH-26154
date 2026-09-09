@@ -45,6 +45,7 @@ class QwenModelInitializer:
         logger.info("Loading local Qwen model: %s (n_gpu_layers=%s)", model_path, settings.N_GPU_LAYERS)
         self.model = Llama(
             model_path=str(model_path),
+            chat_format="chatml",
             n_ctx=self.n_ctx,
             n_gpu_layers=settings.N_GPU_LAYERS,
             verbose=False,
@@ -72,6 +73,7 @@ class QwenVisionInitializer(QwenModelInitializer):
             name="Qwen2.5-VL-3B",
             n_ctx=n_ctx,
         )
+        self.chat_handler: Optional[Any] = None
 
     @property
     def projector_path(self) -> Optional[Path]:
@@ -92,20 +94,29 @@ class QwenVisionInitializer(QwenModelInitializer):
             )
         try:
             from llama_cpp import Llama
+            from llama_cpp.llama_chat_format import Qwen25VLChatHandler
         except ImportError as exc:
             raise RuntimeError(
                 "llama-cpp-python is required to load local Qwen vision models"
             ) from exc
 
         logger.info("Loading local Qwen vision model: %s (n_gpu_layers=%s)", model_path, settings.N_GPU_LAYERS)
+        self.chat_handler = Qwen25VLChatHandler(
+            clip_model_path=str(projector_path),
+            verbose=False,
+        )
         self.model = Llama(
             model_path=str(model_path),
-            clip_model_path=str(projector_path),
+            chat_handler=self.chat_handler,
             n_ctx=self.n_ctx,
             n_gpu_layers=settings.N_GPU_LAYERS,
             verbose=False,
         )
         return self.model
+
+    def unload(self) -> None:
+        super().unload()
+        self.chat_handler = None
 
 
 class QwenFusionInitializer(QwenModelInitializer):
@@ -133,7 +144,7 @@ class QwenOrchestratorInitializer(QwenModelInitializer):
             name="Qwen3-8B",
             n_ctx=n_ctx,
         )
-        self.active_model_name = "Qwen3-8B"
+        self.active_model_name = "Qwen3-4B"
 
     def _determine_gpu_layers(self) -> int:
         """Calculates safe n_gpu_layers based on available VRAM."""
@@ -186,6 +197,7 @@ class QwenOrchestratorInitializer(QwenModelInitializer):
         try:
             self.model = Llama(
                 model_path=str(model_path),
+                chat_format="chatml",
                 n_ctx=self.n_ctx,
                 n_gpu_layers=n_gpu_layers,
                 verbose=False,
@@ -195,6 +207,7 @@ class QwenOrchestratorInitializer(QwenModelInitializer):
                 logger.warning("Failed to load on GPU (%s); attempting fallback on CPU...", exc)
                 self.model = Llama(
                     model_path=str(model_path),
+                    chat_format="chatml",
                     n_ctx=self.n_ctx,
                     n_gpu_layers=0,
                     verbose=False,

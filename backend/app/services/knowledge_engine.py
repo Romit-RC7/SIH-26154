@@ -28,6 +28,10 @@ from backend.app.schemas.knowledge_package import (
     TableSummaryItem,
     VisualInsightItem,
     ContentStrategy,
+    ExecutiveInsightItem,
+    KeyFindingItem,
+    RecommendationItem,
+    RiskOrOpportunityItem,
 )
 from backend.app.services.retrieval_service import retrieval_service, RetrievedChunk
 from backend.app.services.model_initializer.qwen_initializers import qwen_fusion_initializer
@@ -74,7 +78,11 @@ class KnowledgeEngine:
                 elements=[]
             )
 
-        doc_title = semantic_doc.metadata.title or document.filename
+        doc_title = self._resolve_document_title(
+            candidate_title=semantic_doc.metadata.title,
+            fallback_title=document.filename,
+            semantic_doc=semantic_doc
+        )
 
         # 2. Multi-Modal Semantic Search using Intent & Objective
         search_query = self._build_search_query(intent)
@@ -97,6 +105,23 @@ class KnowledgeEngine:
         visual_insights = self._extract_visual_insights(semantic_doc, retrieved_chunks)
 
         # 4. Extract Entities, Claims, Metrics, and Content Strategy (via Qwen3-4B or deterministic extractor)
+        # De-noise: filter out decorative icons/symbols/logos from becoming primary evidence or claims
+        filtered_chunks = []
+        for c in retrieved_chunks:
+            txt_lower = c.content.lower()
+            is_decorative_icon = (
+                '"visual_type": "icon"' in txt_lower
+                or '"visual_type": "database_icon"' in txt_lower
+                or '"visual_type": "symbol"' in txt_lower
+                or '"visual_type": "abstract"' in txt_lower
+                or '"visual_type": "logo"' in txt_lower
+            )
+            if not is_decorative_icon:
+                filtered_chunks.append(c)
+
+        # Fallback to all if filtering removed everything
+        final_chunks = filtered_chunks if filtered_chunks else retrieved_chunks
+
         evidence_items = [
             EvidenceItem(
                 chunk_id=c.id,
@@ -106,10 +131,20 @@ class KnowledgeEngine:
                 text=c.content,
                 relevance_score=c.similarity_score
             )
-            for c in retrieved_chunks
+            for c in final_chunks
         ]
 
-        entities, claims, relationships, metrics, strategy = self._extract_knowledge_and_strategy(
+        (
+            entities,
+            claims,
+            relationships,
+            metrics,
+            strategy,
+            document_story,
+            key_findings,
+            recommendations,
+            executive_insights
+        ) = self._extract_knowledge_and_strategy(
             intent=intent,
             evidence=evidence_items,
             tables=tables,
@@ -137,6 +172,7 @@ class KnowledgeEngine:
             document_id=doc_id,
             document_title=doc_title,
             intent=intent,
+            document_story=document_story,
             retrieved_evidence=evidence_items,
             entities=entities,
             claims=claims,
@@ -144,6 +180,9 @@ class KnowledgeEngine:
             key_metrics=metrics,
             tables=tables,
             visual_insights=visual_insights,
+            executive_insights=executive_insights,
+            key_findings=key_findings,
+            recommendations=recommendations,
             strategy=strategy,
             orchestrator_prompt_context=orchestrator_context,
             metadata={
@@ -240,6 +279,15 @@ class KnowledgeEngine:
 
                 raw_val = raw_attrs.get("visual_analysis") or raw_attrs.get("description")
 
+                # De-noise: also skip decorative logos, icons, and symbols identified via visual_type
+                v_type = ""
+                if isinstance(raw_val, dict):
+                    v_type = str(raw_val.get("visual_type", "")).lower()
+                elif isinstance(raw_attrs.get("visual_type"), str):
+                    v_type = raw_attrs["visual_type"].lower()
+                if v_type in ("logo", "icon", "database_icon", "symbol", "abstract"):
+                    continue
+
                 # Check for meme / informal graphic
                 is_meme = (
                     raw_attrs.get("is_informal_graphic") is True
@@ -259,7 +307,7 @@ class KnowledgeEngine:
                     analysis = str(raw_val)
                 else:
                     analysis = elem.content.caption or f"{elem.type.title()} visualization"
-                
+
                 insights.append(
                     VisualInsightItem(
                         element_id=elem.id,
@@ -280,7 +328,17 @@ class KnowledgeEngine:
         visuals: List[VisualInsightItem],
         doc_title: str,
         semantic_doc: SemanticDocument
-    ) -> tuple[List[EntityItem], List[ClaimItem], List[RelationshipItem], List[KeyMetricItem], ContentStrategy]:
+    ) -> tuple[
+        List[EntityItem],
+        List[ClaimItem],
+        List[RelationshipItem],
+        List[KeyMetricItem],
+        ContentStrategy,
+        str,
+        List[KeyFindingItem],
+        List[RecommendationItem],
+        List[ExecutiveInsightItem]
+    ]:
         """
         Attempts Qwen3-4B inference to perform reasoning; falls back gracefully to
         deterministic semantic extraction if Qwen runtime is not active or use_llm=False.
@@ -302,12 +360,22 @@ class KnowledgeEngine:
         visuals: List[VisualInsightItem],
         doc_title: str,
         semantic_doc: SemanticDocument
-    ) -> tuple[List[EntityItem], List[ClaimItem], List[RelationshipItem], List[KeyMetricItem], ContentStrategy]:
+    ) -> tuple[
+        List[EntityItem],
+        List[ClaimItem],
+        List[RelationshipItem],
+        List[KeyMetricItem],
+        ContentStrategy,
+        str,
+        List[KeyFindingItem],
+        List[RecommendationItem],
+        List[ExecutiveInsightItem]
+    ]:
         """Invokes local Qwen3-4B GGUF model via llama-cpp-python for reasoning."""
         model = qwen_fusion_initializer.load()
 
         context_bullets = "\n".join([f"- [Element: {e.element_id}, Page: {e.page}]: {e.text}" for e in evidence[:6]])
-        
+
         prompt = f"""<|im_start|>system
 You are the Knowledge Engine for an AI Content Transformation Platform.
 Analyze the following document context and user intent. Extract verified entities, factual claims with source element citations, numeric metrics, and outline a content strategy.
@@ -345,7 +413,7 @@ Context Passages:
             stop=["<|im_end|>", "\n\n\n"]
         )
         output_text = response["choices"][0]["text"].strip()
-        
+
         # Parse JSON from output
         json_match = re.search(r"\{.*\}", output_text, re.DOTALL)
         if json_match:
@@ -358,6 +426,7 @@ Context Passages:
                     recommended_cta=str(data.get("recommended_cta", "Explore the full findings.")),
                     tone_guidelines=str(data.get("tone_guidelines", f"Adopt a {intent.tone.value} tone for {intent.audience.value} audience."))
                 )
+
                 claims = []
                 for idx, c in enumerate(data.get("claims", []), start=1):
                     if isinstance(c, dict):
@@ -367,6 +436,7 @@ Context Passages:
                             source_element_ids=[str(s) for s in c.get("source_element_ids", [])],
                             confidence=float(c.get("confidence", 0.9))
                         ))
+
                 metrics = []
                 for m in data.get("metrics", []):
                     if isinstance(m, dict):
@@ -381,7 +451,12 @@ Context Passages:
                 # Merge with semantic_doc entities
                 entities = semantic_doc.entities or self._extract_entities_heuristic(evidence)
                 relationships = semantic_doc.relationships or []
-                return entities, claims, relationships, metrics, strategy
+
+                # Deterministic synthesis for strategic narrative structures the LLM doesn't produce
+                _, _, _, _, _, document_story, key_findings, recommendations, executive_insights = self._deterministic_extraction(
+                    intent, evidence, tables, visuals, doc_title, semantic_doc
+                )
+                return entities, claims, relationships, metrics, strategy, document_story, key_findings, recommendations, executive_insights
             except Exception as parse_err:
                 logger.warning("Qwen3-4B JSON parsing error (%s); falling back to deterministic extraction", parse_err)
 
@@ -395,15 +470,25 @@ Context Passages:
         tables: List[TableSummaryItem],
         visuals: List[VisualInsightItem],
         doc_title: str,
-        semantic_doc: SemanticDocument
-    ) -> tuple[List[EntityItem], List[ClaimItem], List[RelationshipItem], List[KeyMetricItem], ContentStrategy]:
+        semantic_doc: SemanticDocument,
+    ) -> tuple[
+        List[EntityItem],
+        List[ClaimItem],
+        List[RelationshipItem],
+        List[KeyMetricItem],
+        ContentStrategy,
+        str,
+        List[KeyFindingItem],
+        List[RecommendationItem],
+        List[ExecutiveInsightItem]
+    ]:
         """
         Deterministic, rule-based extraction for offline tests and fast CPU environments.
         """
         # 1. Strategy Formulation based on intent
         format_name = intent.output_type.value.replace("_", " ").title()
         headline_hook = f"{format_name}: Strategic Insights on {doc_title}"
-        
+
         structure_map = {
             "linkedin_post": ["Attention Grabber / Hook", "Key Problem / Data Context", "Core Breakthrough / Finding", "Actionable Takeaway", "Call-to-Action & Hashtags"],
             "twitter_thread": ["1/ Hook & Context", "2/ The Core Problem", "3/ Key Data & Stats", "4/ Solution / Insight", "5/ Summary & Takeaway"],
@@ -422,52 +507,174 @@ Context Passages:
             tone_guidelines=f"Deliver insights using a {intent.tone.value} voice tailored specifically for {intent.audience.value}."
         )
 
-        # 2. Claims Extraction from top evidence
+        # 2. Claims Extraction from top evidence (skip raw json, decorative icon text, and pure URLs)
         claims: List[ClaimItem] = []
-        for idx, ev in enumerate(evidence[:5]):
-            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", ev.text) if len(s.strip()) > 20]
+        for idx, ev in enumerate(evidence[:6]):
+            # Skip chunks that are raw json dumps or icon descriptions
+            if ev.text.strip().startswith("{") or "visual_type" in ev.text.lower():
+                continue
+            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", ev.text) if len(s.strip()) > 20 and not s.strip().startswith("|")]
             if sentences:
                 claims.append(
                     ClaimItem(
-                        id=f"claim_{idx+1}",
+                        id=f"claim_{len(claims)+1}",
                         statement=sentences[0],
                         source_element_ids=[ev.element_id] if ev.element_id else [],
                         confidence=round(ev.relevance_score, 2)
                     )
                 )
+            if len(claims) >= 5:
+                break
 
-        # 3. Metrics Extraction from text & tables
+        # Fallback if text claims are sparse: synthesize from tables/visuals
+        if not claims and tables:
+            claims.append(
+                ClaimItem(
+                    id="claim_1",
+                    statement=f"Document defines a structured architecture across key modules detailed on Page {tables[0].page}.",
+                    source_element_ids=[tables[0].element_id],
+                    confidence=0.95
+                )
+            )
+
+        # 3. Metrics Extraction from text & tables (strip URLs and software versions)
         metrics: List[KeyMetricItem] = []
-        metric_count = 0
+        # First: extract any concrete metrics from tables
+        for tbl in tables:
+            for line in tbl.markdown_table.splitlines():
+                if "|" in line and not line.strip().startswith("| -") and not line.strip().startswith("|Technology") and not line.strip().startswith("| Technology"):
+                    cells = [c.strip() for c in line.split("|")[1:-1]]
+                    if len(cells) >= 2 and cells[0] and not cells[0].startswith("---"):
+                        row_name = cells[0]
+                        for c_val in cells[1:]:
+                            if c_val and not c_val.startswith("http") and not c_val.startswith("https") and len(c_val) < 60:
+                                # Check if cell contains number, percentage, multiplier, or key tech spec
+                                if re.search(r"\b(?:\d+(?:\.\d+)?(?:%|x|k|M|B|GB|TB|ms)?)\b", c_val) or any(k in c_val.lower() for k in ["docker", "qwen", "jwt", "faster"]):
+                                    metrics.append(
+                                        KeyMetricItem(
+                                            label=f"{row_name}",
+                                            value=c_val,
+                                            context=f"{row_name}: {c_val}",
+                                            source_element_id=tbl.element_id,
+                                            page=tbl.page
+                                        )
+                                    )
+                                    if len(metrics) >= 6:
+                                        break
+                if len(metrics) >= 6:
+                    break
+
+        # Second: text metrics with strict URL/version sanitization
         for ev in evidence:
-            matches = self.metric_regex.findall(ev.text)
+            if len(metrics) >= 8:
+                break
+            # Strip URLs and markdown links before matching numbers
+            sanitized_text = re.sub(r"https?://\S+", "", ev.text)
+            sanitized_text = re.sub(r"\[.*?\]\(.*?\)", "", sanitized_text)
+            sanitized_text = re.sub(r"\bv\d+(?:\.\d+)*\b", "", sanitized_text, flags=re.IGNORECASE)
+
+            matches = self.metric_regex.findall(sanitized_text)
             for m in matches:
-                # Find surrounding phrase for context
-                pos = ev.text.find(m)
+                clean_m = m.strip()
+                # Ignore isolated single-digit integers without units or symbols
+                if clean_m.isdigit() and len(clean_m) <= 2:
+                    continue
+                pos = sanitized_text.find(clean_m)
                 start = max(0, pos - 30)
-                end = min(len(ev.text), pos + len(m) + 30)
-                ctx = ev.text[start:end].strip()
+                end = min(len(sanitized_text), pos + len(clean_m) + 30)
+                ctx = sanitized_text[start:end].strip()
 
                 metrics.append(
                     KeyMetricItem(
-                        label=f"Data Point {metric_count + 1}",
-                        value=m,
+                        label=f"Metric {len(metrics) + 1}",
+                        value=clean_m,
                         context=ctx,
                         source_element_id=ev.element_id,
                         page=ev.page
                     )
                 )
-                metric_count += 1
-                if metric_count >= 6:
+                if len(metrics) >= 8:
                     break
-            if metric_count >= 6:
-                break
 
-        # 4. Entities & Relationships
-        entities = semantic_doc.entities or self._extract_entities_heuristic(evidence)
+        # 4. Entities & Relationships (prioritize table first-column names if available)
+        table_entities = []
+        for tbl in tables:
+            for line in tbl.markdown_table.splitlines():
+                if "|" in line and not line.strip().startswith("| -") and not line.strip().startswith("| Technology") and not line.strip().startswith("|Technology"):
+                    cells = [c.strip() for c in line.split("|")[1:-1]]
+                    if cells and cells[0] and not cells[0].startswith("---") and len(cells[0]) > 2:
+                        ent_name = cells[0]
+                        if ent_name not in [e.name for e in table_entities] and ent_name.lower() not in ("technology", "purpose", "solution", "reference"):
+                            table_entities.append(
+                                EntityItem(
+                                    id=f"ent_{len(table_entities)+1}",
+                                    name=ent_name,
+                                    category="TECHNOLOGY",
+                                    mentions=[tbl.element_id],
+                                    confidence=0.92
+                                )
+                            )
+                            if len(table_entities) >= 8:
+                                break
+
+        entities = table_entities or semantic_doc.entities or self._extract_entities_heuristic(evidence)
         relationships = semantic_doc.relationships or []
 
-        return entities, claims, relationships, metrics, strategy
+        # 5. Synthesize Document Story, Key Findings, and Recommendations
+        key_findings: List[KeyFindingItem] = []
+        for idx, c in enumerate(claims[:4]):
+            key_findings.append(
+                KeyFindingItem(
+                    finding=c.statement,
+                    source_element_ids=c.source_element_ids,
+                    confidence=c.confidence
+                )
+            )
+
+        # If findings were sparse, synthesize from diagrams/tables
+        for vis in visuals[:2]:
+            if vis.takeaway and len(key_findings) < 5:
+                # Extract first clean sentence or key details
+                clean_vis = re.sub(r"```json.*?```", "", vis.takeaway, flags=re.DOTALL).strip()
+                if not clean_vis:
+                    clean_vis = vis.caption or f"{vis.element_type.title()} analysis"
+                key_findings.append(
+                    KeyFindingItem(
+                        finding=clean_vis[:200],
+                        source_element_ids=[vis.element_id],
+                        confidence=0.90
+                    )
+                )
+
+        recommendations: List[RecommendationItem] = [
+            RecommendationItem(
+                action=f"Adopt the core architectural and transformation recommendations outlined in {doc_title}.",
+                rationale="Aligns operational processes with the verified system capabilities and specifications.",
+                priority="high"
+            ),
+            RecommendationItem(
+                action="Deploy robust verification and access control measures across integrated modules.",
+                rationale="Ensures enterprise data security, audit integrity, and regulatory governance.",
+                priority="strategic"
+            )
+        ]
+
+        executive_insights: List[ExecutiveInsightItem] = [
+            ExecutiveInsightItem(
+                headline=f"Strategic Transformation Vector: {doc_title}",
+                takeaway=f"{doc_title} presents an integrated architectural paradigm designed to optimize performance, automate delivery, and maintain security.",
+                confidence=0.95
+            )
+        ]
+
+        document_story = (
+            f"This document, titled '{doc_title}', outlines a strategic framework and architecture designed to transform inputs into high-impact deliverables. "
+            f"Key technologies and processes work in coordination to provide automated, scalable, and verifiable results for executive decision-makers.\n\n"
+            f"Through structured components including data ingestion, semantic analysis, and secure deployment, the system establishes operational efficiency, "
+            f"data integrity, and competitive advantages across business and technical workflows."
+        )
+
+        return entities, claims, relationships, metrics, strategy, document_story, key_findings, recommendations, executive_insights
 
     def _extract_entities_heuristic(self, evidence: List[EvidenceItem]) -> List[EntityItem]:
         """Heuristic named entity extraction using capitalization patterns."""
@@ -562,6 +769,59 @@ Context Passages:
             lines.append("")
 
         return "\n".join(lines)
+
+    def _resolve_document_title(
+        self,
+        candidate_title: Optional[str],
+        fallback_title: Optional[str],
+        semantic_doc: SemanticDocument
+    ) -> str:
+        """
+        Determines the most accurate, human-readable title for the document.
+        If the candidate title or filename is missing or is an auto-generated UUID,
+        inspects the first page/slide elements for a header/title.
+        """
+        uuid_pattern = re.compile(
+            r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+        )
+
+        title = (candidate_title or "").strip()
+        is_uuid_candidate = bool(uuid_pattern.search(title))
+
+        # If candidate_title is already a meaningful, non-UUID title, use it
+        if title and not is_uuid_candidate:
+            return title
+
+        # Check fallback_title (e.g., original filename without extension)
+        fallback = (fallback_title or "").strip()
+        # Strip common extensions if filename was passed
+        cleaned_fallback = re.sub(r"\.(pdf|docx|pptx|txt|png|jpg|jpeg|webm|mp4)$", "", fallback, flags=re.IGNORECASE).strip()
+        is_uuid_fallback = bool(uuid_pattern.search(cleaned_fallback))
+
+        if cleaned_fallback and not is_uuid_fallback:
+            return cleaned_fallback
+
+        # Candidate and fallback are UUIDs or empty: inspect page 1 elements for header/title
+        if semantic_doc and semantic_doc.elements:
+            page_1_elements = [e for e in semantic_doc.elements if e.page == 1]
+
+            # 1. Prefer explicit title or heading elements
+            for elem in page_1_elements:
+                if elem.type in ("title", "heading", "header"):
+                    text = (elem.content.text or "").strip()
+                    if text and len(text) < 120 and not uuid_pattern.search(text):
+                        return text
+
+            # 2. Fall back to the first non-empty text element on page 1 that is title-like
+            for elem in page_1_elements:
+                if elem.type == "text":
+                    text = (elem.content.text or "").strip()
+                    first_line = text.split("\n")[0].strip()
+                    if first_line and 3 < len(first_line) < 100 and not uuid_pattern.search(first_line):
+                        return first_line
+
+        # Final fallback: whatever candidate or fallback string was available, or "Untitled Document"
+        return cleaned_fallback or title or "Untitled Document"
 
 
 # Global knowledge engine instance

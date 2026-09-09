@@ -111,5 +111,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
-# Launch FastAPI with Uvicorn
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Launch FastAPI with Uvicorn (excluding uploads and tests from triggering reloads)
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "backend/app", "--reload-exclude", "uploads/*", "--reload-exclude", "backend/tests/*"]
